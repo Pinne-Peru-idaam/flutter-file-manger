@@ -11,6 +11,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pdf_render/pdf_render.dart';
 import 'package:flutter/services.dart'; // For ImageByteFormat
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 void main() {
   runApp(MyApp());
@@ -2619,20 +2620,25 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
-  final ScrollController _scrollController =
-      ScrollController(); // Add this line
+  final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   late FileAssistant _assistant;
   late OfflineChatAssistant _chatAssistant;
   bool _isProcessing = false;
   bool _inChatMode = false;
-  bool _ttsEnabled = true; // Add this line to track TTS state
+  bool _ttsEnabled = true;
+
+  // Speech recognition variables
+  stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  String _recognizedText = '';
 
   @override
   void initState() {
     super.initState();
     _assistant = FileAssistant(fileIndex: widget.fileIndex);
     _chatAssistant = OfflineChatAssistant();
+    _initSpeech(); // Initialize speech recognition
 
     // Add welcome message with example commands
     _messages.add(ChatMessage(
@@ -2649,6 +2655,77 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Load chat history
     _loadChatHistory();
+  }
+
+  // Initialize speech recognition
+  void _initSpeech() async {
+    bool available = await _speech.initialize(
+      onStatus: (status) {
+        print('Speech recognition status: $status');
+        if (status == 'done' && _isListening) {
+          setState(() {
+            _isListening = false;
+          });
+          if (_recognizedText.isNotEmpty) {
+            _handleSubmitted(_recognizedText);
+          }
+        }
+      },
+      onError: (errorNotification) {
+        print('Speech recognition error: $errorNotification');
+        setState(() {
+          _isListening = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'Voice recognition error: ${errorNotification.errorMsg}')),
+        );
+      },
+    );
+
+    if (!available) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Speech recognition not available on this device')),
+      );
+    }
+  }
+
+  // Toggle speech recognition
+  void _toggleListening() {
+    if (_speech.isNotListening) {
+      // Start listening
+      _recognizedText = '';
+      setState(() {
+        _isListening = true;
+      });
+
+      _speech.listen(
+        onResult: (result) {
+          setState(() {
+            _recognizedText = result.recognizedWords;
+            _controller.text = _recognizedText;
+          });
+        },
+        listenFor: Duration(seconds: 30), // Maximum listen duration
+        pauseFor:
+            Duration(seconds: 5), // Stop listening after this much silence
+        partialResults: true, // Get results as you speak
+        cancelOnError: true,
+        listenMode: stt.ListenMode.confirmation,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Listening...')),
+      );
+    } else {
+      // Stop listening
+      _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+    }
   }
 
   Future<void> _loadChatHistory() async {
@@ -2998,7 +3075,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: ListView.builder(
-              controller: _scrollController, // Add this line
+              controller: _scrollController,
               padding: EdgeInsets.all(8.0),
               reverse: false,
               itemCount: _messages.length,
@@ -3222,8 +3299,8 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Row(
           children: [
             IconButton(
-              icon: Icon(_inChatMode ? Icons.chat : Icons.mic),
-              color: _inChatMode ? Colors.green : null,
+              icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+              color: _isListening ? Colors.red : null,
               onPressed: () {
                 if (_inChatMode) {
                   // Show a hint for chat mode
@@ -3235,10 +3312,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   );
                 } else {
-                  // Voice input placeholder
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Voice input coming soon!')),
-                  );
+                  // Toggle speech recognition
+                  _toggleListening();
                 }
               },
             ),
@@ -3246,21 +3321,25 @@ class _ChatScreenState extends State<ChatScreen> {
               child: TextField(
                 controller: _controller,
                 decoration: InputDecoration(
-                  hintText: _inChatMode
-                      ? "Chat with Alex..."
-                      : "Ask me about your files...",
+                  hintText: _isListening
+                      ? "Listening..."
+                      : (_inChatMode
+                          ? "Chat with Alex..."
+                          : "Ask me about your files..."),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: _inChatMode
-                      ? (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.green.withOpacity(0.2)
-                          : Colors.green.withOpacity(0.1))
-                      : (Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[800]
-                          : Colors.grey[200]),
+                  fillColor: _isListening
+                      ? Colors.red.withOpacity(0.1)
+                      : (_inChatMode
+                          ? (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.green.withOpacity(0.1))
+                          : (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey[800]
+                              : Colors.grey[200])),
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
@@ -3295,8 +3374,9 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _controller.dispose();
-    _scrollController.dispose(); // Add this line
+    _scrollController.dispose();
     _assistant.stop();
+    _speech.cancel(); // Cancel any active speech recognition
     super.dispose();
   }
 }
