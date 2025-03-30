@@ -9,6 +9,8 @@ import 'package:open_file/open_file.dart';
 import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pdf_render/pdf_render.dart';
+import 'package:flutter/services.dart'; // For ImageByteFormat
 
 void main() {
   runApp(MyApp());
@@ -1921,6 +1923,12 @@ class FileAssistant {
       RegExp(r'make\s+(?:an\s+)?image\s+(?:from|of)\s+(?:the\s+)?(.+\.pdf)',
           caseSensitive: false),
     ],
+    'chat': [
+      RegExp(r"let's\s+chat(.*)", caseSensitive: false),
+      RegExp(r"talk\s+to\s+me(.*)", caseSensitive: false),
+      RegExp(r"have\s+a\s+conversation(.*)", caseSensitive: false),
+      RegExp(r"chat\s+with\s+me(.*)", caseSensitive: false),
+    ],
   };
 
   FileAssistant({required this.fileIndex}) {
@@ -1936,7 +1944,7 @@ class FileAssistant {
 
   // Process user queries and perform actions
   Future<ChatMessage> processQuery(String query) async {
-    // Check for specific intents based on pattern matching
+    // First check for specific intents based on pattern matching
     final intentInfo = _detectIntent(query);
 
     if (intentInfo != null) {
@@ -1949,31 +1957,94 @@ class FileAssistant {
         return _handleOpenFile(param);
       } else if (intent == 'convert_pdf_to_image' && param != null) {
         return _handleConversion(param, 'pdf', 'image');
+      } else if (intent == 'chat' && param != null) {
+        return _handleChat(param);
       }
+    }
+
+    // Conversation patterns
+    if (query.toLowerCase().contains('hello') ||
+        query.toLowerCase().contains('hi') ||
+        query.toLowerCase().contains('hey')) {
+      return ChatMessage(
+        text:
+            "Hello! I'm your file assistant. I can help you find files, convert PDFs to images, or tell you about your files. What would you like help with today?",
+        isUser: false,
+        files: [],
+      );
+    }
+
+    if (query.toLowerCase().contains('what can you do') ||
+        query.toLowerCase().contains('help me') ||
+        query.toLowerCase() == 'help') {
+      return ChatMessage(
+        text: "I can help you with several file-related tasks:\n\n"
+            "• Find files (e.g., 'Find my documents', 'Where are my photos?')\n"
+            "• Open files (e.g., 'Open my resume.pdf')\n"
+            "• Convert PDFs to images (e.g., 'Convert invoice.pdf to image')\n"
+            "• Show information about files in your storage\n\n"
+            "What would you like to do?",
+        isUser: false,
+        files: [],
+      );
+    }
+
+    if (query.toLowerCase().contains('thank')) {
+      return ChatMessage(
+        text:
+            "You're welcome! Let me know if you need anything else with your files.",
+        isUser: false,
+        files: [],
+      );
     }
 
     // General intent detection as fallback
     if (query.toLowerCase().contains('find') ||
         query.toLowerCase().contains('search') ||
-        query.toLowerCase().contains('look for')) {
+        query.toLowerCase().contains('look for') ||
+        query.toLowerCase().contains('where')) {
       return _handleSearchQuery(query);
     }
 
     if (query.toLowerCase().contains('convert') &&
-        query.toLowerCase().contains('pdf') &&
-        query.toLowerCase().contains('image')) {
+        (query.toLowerCase().contains('pdf') ||
+            query.toLowerCase().contains('.pdf')) &&
+        (query.toLowerCase().contains('image') ||
+            query.toLowerCase().contains('jpg') ||
+            query.toLowerCase().contains('png'))) {
       return _handleConversion(query, 'pdf', 'image');
     }
 
     if (query.toLowerCase().contains('open') ||
-        query.toLowerCase().contains('show me')) {
+        query.toLowerCase().contains('show me') ||
+        query.toLowerCase().contains('display')) {
       return _handleOpenFile(query);
     }
 
-    // Default response for other queries
+    // Try semantic search to find files related to the query
+    final results = fileIndex.semanticSearch(query);
+    if (results.isNotEmpty) {
+      final limitedResults = results.take(3).toList();
+      final fileList = limitedResults.map((path) {
+        return FileInfo(
+          path: path,
+          name: path.split('/').last,
+          type: _getFileTypeFromPath(path),
+        );
+      }).toList();
+
+      return ChatMessage(
+        text:
+            "I found these files that might be related to your question. Would you like me to help you with any of them?",
+        isUser: false,
+        files: fileList,
+      );
+    }
+
+    // Default response
     return ChatMessage(
       text:
-          "I'm not sure how to help with that. Try asking me to find files, open them, or convert between formats.",
+          "I'm not sure how to help with that specific request. You can ask me to find files, open them, or convert PDFs to images. Would you like me to show you what files you have?",
       isUser: false,
       files: [],
     );
@@ -2233,6 +2304,206 @@ class FileAssistant {
   Future<void> stop() async {
     await flutterTts.stop();
   }
+
+  // Handle chat intent - redirects to the OfflineChatAssistant
+  Future<ChatMessage> _handleChat(String query) async {
+    return ChatMessage(
+      text:
+          "Let's chat! I'm not just a file assistant - I'm happy to talk about other things too. How's your day going?",
+      isUser: false,
+      files: [],
+      action: "start_chat",
+    );
+  }
+}
+
+// New class for more human-like conversation
+class OfflineChatAssistant {
+  // Personal details to create a more human-like persona
+  final String name = "Alex";
+  final List<String> hobbies = ["photography", "hiking", "reading", "coding"];
+  final Map<String, List<String>> knowledgeBase = {
+    "interests": ["mobile apps", "AI", "technology", "productivity"],
+    "facts": [
+      "I'm always learning new things about files and organization",
+      "I enjoy helping people find what they're looking for",
+      "I believe good file organization saves time",
+      "I prefer simplicity over complexity"
+    ],
+    "quotes": [
+      "The art of filing is knowing where to find things when you need them.",
+      "Digital organization is the key to digital peace of mind.",
+      "A well-named file is half found."
+    ]
+  };
+
+  // Tracks conversation context
+  List<String> recentTopics = [];
+  int messageCount = 0;
+  bool personalModeActive = false;
+
+  // Map for small talk responses
+  final Map<String, List<String>> smallTalkResponses = {
+    "greeting": [
+      "Hey there! How's your day going?",
+      "Hi! Nice to chat with you today.",
+      "Hello! What can I help you with today?",
+      "Hey! I'm here to assist with your files and have a chat."
+    ],
+    "how_are_you": [
+      "I'm doing great, thanks for asking! How about you?",
+      "Pretty good! Always happy to help organize files and chat. How are you?",
+      "I'm good! Ready to help with whatever you need today.",
+      "Doing well! I've been helping organize lots of files lately."
+    ],
+    "goodbye": [
+      "Talk to you later! Let me know if you need help with your files.",
+      "Goodbye! Feel free to chat anytime you need assistance.",
+      "See you soon! I'll be here when you need help with your files.",
+      "Bye for now! Come back anytime for file help or just to chat."
+    ],
+    "thanks": [
+      "You're welcome! I'm happy I could help.",
+      "Anytime! That's what I'm here for.",
+      "No problem at all! Let me know if you need anything else.",
+      "Glad I could be of assistance!"
+    ],
+    "weather": [
+      "I don't have real-time weather data, but I hope it's nice where you are!",
+      "I can't check the weather, but I can help organize your weather photos!",
+      "I wish I could tell you the forecast, but I'm better with files than weather.",
+      "While I can't see outside, I can help you find weather-related documents."
+    ],
+    "joke": [
+      "Why don't scientists trust atoms? Because they make up everything!",
+      "What did the file say to the folder? You're always keeping my stuff!",
+      "Why was the computer cold? It left its Windows open!",
+      "What do you call a factory that makes good products? A satisfactory!"
+    ],
+    "who_are_you": [
+      "I'm Alex, your personal file assistant. I help you manage files and we can chat about other things too!",
+      "I'm a digital assistant named Alex that specializes in file management, but I enjoy good conversation too.",
+      "Think of me as your file-organizing friend Alex who's always ready to chat!",
+      "I'm Alex, designed to help with your files but also happy to have a friendly conversation."
+    ]
+  };
+
+  // Regex patterns for common conversation topics
+  final Map<String, RegExp> _conversationPatterns = {
+    "greeting":
+        RegExp(r"\b(hi|hello|hey|greetings|howdy)\b", caseSensitive: false),
+    "how_are_you": RegExp(
+        r"\b(how are you|how's it going|how are things|what's up|how do you feel)\b",
+        caseSensitive: false),
+    "goodbye": RegExp(
+        r"\b(bye|goodbye|see you|talk later|farewell|have to go)\b",
+        caseSensitive: false),
+    "thanks": RegExp(r"\b(thanks|thank you|appreciate|grateful)\b",
+        caseSensitive: false),
+    "weather": RegExp(r"\b(weather|temperature|forecast|rain|sunny|cold|hot)\b",
+        caseSensitive: false),
+    "joke": RegExp(r"\b(joke|funny|make me laugh|tell me something funny)\b",
+        caseSensitive: false),
+    "who_are_you": RegExp(
+        r"\b(who are you|what are you|tell me about yourself|your name|who is this)\b",
+        caseSensitive: false),
+  };
+
+  // Generate a personal response based on the user's query
+  Future<ChatMessage> processChat(String query) async {
+    messageCount++;
+
+    // Check if we're already in personal mode or if the user wants to chat
+    if (!personalModeActive) {
+      for (var pattern in _conversationPatterns.entries) {
+        if (pattern.value.hasMatch(query.toLowerCase())) {
+          personalModeActive = true;
+          break;
+        }
+      }
+    }
+
+    // If in personal chat mode, respond conversationally
+    if (personalModeActive) {
+      // Store the topic if it seems important
+      if (query.length > 15 && !query.toLowerCase().contains("how are you")) {
+        recentTopics.add(query);
+        if (recentTopics.length > 3) {
+          recentTopics.removeAt(0);
+        }
+      }
+
+      // Check for specific conversation patterns
+      for (var entry in _conversationPatterns.entries) {
+        if (entry.value.hasMatch(query.toLowerCase())) {
+          final responses = smallTalkResponses[entry.key] ?? [];
+          if (responses.isNotEmpty) {
+            final response = responses[messageCount % responses.length];
+            return ChatMessage(
+              text: response,
+              isUser: false,
+              files: [],
+            );
+          }
+        }
+      }
+
+      // Check for questions about me
+      if (query.toLowerCase().contains("you like") ||
+          query.toLowerCase().contains("your hobby") ||
+          query.toLowerCase().contains("you enjoy")) {
+        return ChatMessage(
+          text:
+              "I enjoy ${hobbies[messageCount % hobbies.length]} when I'm not helping with files. What about you?",
+          isUser: false,
+          files: [],
+        );
+      }
+
+      // Simple question detection
+      if (query.toLowerCase().contains("?")) {
+        final facts = knowledgeBase["facts"] ?? [];
+        if (facts.isNotEmpty) {
+          return ChatMessage(
+            text:
+                "That's an interesting question! ${facts[messageCount % facts.length]}. What else would you like to know?",
+            isUser: false,
+            files: [],
+          );
+        }
+      }
+
+      // Generic conversation continuers
+      final continuers = [
+        "Tell me more about that.",
+        "That's interesting! What else is on your mind?",
+        "I'd love to hear more about that. Or we can get back to your files if you prefer?",
+        "I enjoy our conversations. Is there anything specific you'd like to talk about or need help with?",
+        "Thanks for sharing that with me. Speaking of which, I found a quote you might like: ${knowledgeBase["quotes"]![messageCount % knowledgeBase["quotes"]!.length]}"
+      ];
+
+      return ChatMessage(
+        text: continuers[messageCount % continuers.length],
+        isUser: false,
+        files: [],
+      );
+    }
+
+    // If not in personal mode, return a message suggesting we can chat
+    return ChatMessage(
+      text:
+          "It seems like you want to chat! I'm not just a file assistant - I'm happy to talk about other things too. How's your day going?",
+      isUser: false,
+      files: [],
+    );
+  }
+
+  // Reset conversation state
+  void resetConversation() {
+    recentTopics.clear();
+    messageCount = 0;
+    personalModeActive = false;
+  }
 }
 
 // Utility class for file conversions
@@ -2248,22 +2519,43 @@ class ConversionUtils {
         await outputDir.create(recursive: true);
       }
 
-      // We could use a PDF rendering plugin here.
-      // For this demonstration, we'll simulate conversion
       final outputPaths = <String>[];
 
-      // Notify the user that this is a placeholder implementation
-      print(
-          'PDF to image conversion is a placeholder. In a real app, you would use a PDF rendering library.');
+      // Open the PDF document
+      final pdfDocument = await PdfDocument.openFile(pdfPath);
+      print('PDF opened: ${pdfDocument.pageCount} pages');
 
-      // Create a simulated converted image file for demonstration
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final outputPath = '${outputDir.path}/converted_$timestamp.png';
+      // Convert each page to an image
+      for (int i = 0; i < pdfDocument.pageCount; i++) {
+        // Get the page
+        final page = await pdfDocument.getPage(i + 1);
 
-      final file = File(outputPath);
-      await file.writeAsString('Simulated converted image');
+        // Calculate a good resolution (300 DPI)
+        final scale = 2.0; // 2x for better quality
+        final width = (page.width * scale).toInt();
+        final height = (page.height * scale).toInt();
 
-      outputPaths.add(outputPath);
+        // Render the page to an image
+        final pageImage = await page.render(
+          width: width,
+          height: height,
+          fullWidth: page.width * scale,
+          fullHeight: page.height * scale,
+        );
+
+        // Get the image data - use pixels property to get RGBA data
+        final imgData = pageImage.pixels;
+
+        // Save the image
+        final imagePath = '${outputDir.path}/page_${i + 1}.png';
+        final imageFile = File(imagePath);
+        await imageFile.writeAsBytes(imgData);
+
+        outputPaths.add(imagePath);
+      }
+
+      // Clean up
+      pdfDocument.dispose();
 
       return outputPaths;
     } catch (e) {
@@ -2327,18 +2619,30 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController =
+      ScrollController(); // Add this line
   final List<ChatMessage> _messages = [];
   late FileAssistant _assistant;
+  late OfflineChatAssistant _chatAssistant;
   bool _isProcessing = false;
+  bool _inChatMode = false;
+  bool _ttsEnabled = true; // Add this line to track TTS state
 
   @override
   void initState() {
     super.initState();
     _assistant = FileAssistant(fileIndex: widget.fileIndex);
+    _chatAssistant = OfflineChatAssistant();
 
-    // Add welcome message
+    // Add welcome message with example commands
     _messages.add(ChatMessage(
-      text: "Hi! I'm your file assistant. How can I help you today?",
+      text:
+          "Hi! I'm your file assistant. Here are some things you can ask me to do:\n\n"
+          "• \"Find my PDF files\"\n"
+          "• \"Convert document.pdf to image\"\n"
+          "• \"Show me my photos\"\n"
+          "• \"What's in my Downloads folder?\"\n\n"
+          "You can also tap on any file to interact with it, or simply chat with me about anything! How can I help you today?",
       isUser: false,
       files: [],
     ));
@@ -2397,23 +2701,129 @@ class _ChatScreenState extends State<ChatScreen> {
       _isProcessing = true;
     });
 
-    // Process user query
-    final response = await _assistant.processQuery(text);
+    // Scroll to bottom after adding user message
+    _scrollToBottom();
+
+    ChatMessage response;
+
+    // Check if this is a conversation message or a file command
+    if (_inChatMode) {
+      // First try to detect if the user is asking for file assistance
+      final intentInfo = _assistant._detectIntent(text);
+      if (intentInfo != null && intentInfo['intent'] != 'chat') {
+        // If user asks about files while in chat mode, switch back
+        _inChatMode = false;
+        response = await _assistant.processQuery(text);
+      } else {
+        // Otherwise continue the conversation
+        response = await _chatAssistant.processChat(text);
+      }
+    } else {
+      // Check if this is a chat request
+      final intentInfo = _assistant._detectIntent(text);
+      if (intentInfo != null && intentInfo['intent'] == 'chat') {
+        _inChatMode = true;
+        response = await _chatAssistant.processChat(text);
+      } else if (_isPotentialChatMessage(text)) {
+        response = await _chatAssistant.processChat(text);
+        if (_chatAssistant.personalModeActive) {
+          _inChatMode = true;
+        }
+      } else {
+        // Process as file query
+        response = await _assistant.processQuery(text);
+      }
+    }
 
     setState(() {
       _messages.add(response);
       _isProcessing = false;
     });
 
+    // Scroll to bottom after adding response
+    _scrollToBottom();
+
+    // Speak the response if TTS is enabled
+    if (_ttsEnabled && !response.isUser) {
+      _assistant.speak(response.text);
+    }
+
     // Save chat history
     _saveChatHistory();
+  }
+
+  bool _isPotentialChatMessage(String text) {
+    final chatIndicators = [
+      'hi',
+      'hello',
+      'hey',
+      'how are you',
+      'what\'s up',
+      'good morning',
+      'good afternoon',
+      'good evening',
+      'tell me',
+      'talk',
+      'chat',
+      '?',
+      '!'
+    ];
+
+    final normalizedText = text.toLowerCase();
+
+    // Short messages are more likely to be conversation starters
+    if (text.length < 15) {
+      for (final indicator in chatIndicators) {
+        if (normalizedText.contains(indicator)) {
+          return true;
+        }
+      }
+    }
+
+    // Catch questions not related to files
+    if (normalizedText.contains('?') &&
+        !normalizedText.contains('file') &&
+        !normalizedText.contains('pdf') &&
+        !normalizedText.contains('find') &&
+        !normalizedText.contains('show') &&
+        !normalizedText.contains('search')) {
+      return true;
+    }
+
+    return false;
   }
 
   void _handleFileAction(String? action, FileInfo file) async {
     if (action == null) return;
 
+    if (action == "start_chat") {
+      _inChatMode = true;
+      setState(() {
+        _messages.add(ChatMessage(
+          text:
+              "I'd love to chat! I'm Alex, by the way. What would you like to talk about?",
+          isUser: false,
+          files: [],
+        ));
+      });
+      return;
+    }
+
     if (action == "open_file") {
       try {
+        // For simulated converted files, show a helpful message
+        if (file.path.contains('/pdf_to_image/converted_') &&
+            file.name.startsWith('converted_')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'PDF to image conversion is simulated. To enable real conversion, add the pdf_render plugin.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+          return;
+        }
+
         await OpenFile.open(file.path);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2516,13 +2926,63 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat with Files AI'),
+        title: Text(_inChatMode ? 'Chat with Alex' : 'Chat with Files AI'),
         actions: [
+          // Add a TTS toggle button
+          IconButton(
+            icon: Icon(_ttsEnabled ? Icons.volume_up : Icons.volume_off),
+            tooltip: _ttsEnabled ? 'Disable voice' : 'Enable voice',
+            onPressed: () {
+              setState(() {
+                _ttsEnabled = !_ttsEnabled;
+                if (!_ttsEnabled) {
+                  _assistant.stop(); // Stop any ongoing speech
+                }
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text(_ttsEnabled ? 'Voice enabled' : 'Voice disabled'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+          ),
+          // Existing mode toggle button
+          IconButton(
+            icon: Icon(_inChatMode ? Icons.folder : Icons.chat),
+            tooltip: _inChatMode
+                ? 'Switch to File Assistant'
+                : 'Switch to Chat Mode',
+            onPressed: () {
+              setState(() {
+                _inChatMode = !_inChatMode;
+                if (_inChatMode) {
+                  _messages.add(ChatMessage(
+                    text:
+                        "I'm now in chat mode! Feel free to talk about anything. If you need file help, just ask about files and I'll switch back.",
+                    isUser: false,
+                    files: [],
+                  ));
+                } else {
+                  _messages.add(ChatMessage(
+                    text:
+                        "Back to file assistant mode. How can I help with your files?",
+                    isUser: false,
+                    files: [],
+                  ));
+                }
+              });
+            },
+          ),
+          // Existing delete button
           IconButton(
             icon: Icon(Icons.delete),
             onPressed: () {
               setState(() {
                 _messages.clear();
+                _inChatMode = false;
+                _chatAssistant.resetConversation();
                 _messages.add(ChatMessage(
                   text: "Chat cleared. How can I help you?",
                   isUser: false,
@@ -2538,6 +2998,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController, // Add this line
               padding: EdgeInsets.all(8.0),
               reverse: false,
               itemCount: _messages.length,
@@ -2683,15 +3144,73 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
-              IconButton(
-                icon: Icon(Icons.open_in_new),
-                onPressed: () => _handleFileAction('open_file', file),
+              PopupMenuButton(
+                icon: Icon(Icons.more_vert),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'open',
+                    child: Row(
+                      children: [
+                        Icon(Icons.open_in_new, size: 18),
+                        SizedBox(width: 8),
+                        Text('Open file'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'use_in_chat',
+                    child: Row(
+                      children: [
+                        Icon(Icons.chat, size: 18),
+                        SizedBox(width: 8),
+                        Text('Use in chat'),
+                      ],
+                    ),
+                  ),
+                  if (file.type == 'pdf')
+                    PopupMenuItem(
+                      value: 'convert',
+                      child: Row(
+                        children: [
+                          Icon(Icons.transform, size: 18),
+                          SizedBox(width: 8),
+                          Text('Convert to image'),
+                        ],
+                      ),
+                    ),
+                ],
+                onSelected: (value) {
+                  if (value == 'open') {
+                    _handleFileAction('open_file', file);
+                  } else if (value == 'use_in_chat') {
+                    _controller.text = _suggestCommandForFile(file);
+                  } else if (value == 'convert') {
+                    _handleFileAction("convert_pdf_to_image", file);
+                  }
+                },
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _suggestCommandForFile(FileInfo file) {
+    switch (file.type) {
+      case 'pdf':
+        return "Can you convert ${file.name} to an image?";
+      case 'image':
+        return "Tell me about this image ${file.name}";
+      case 'document':
+        return "What's in the document ${file.name}?";
+      case 'video':
+        return "Can you extract audio from ${file.name}?";
+      case 'audio':
+        return "Can you transcribe ${file.name}?";
+      default:
+        return "Tell me more about ${file.name}";
+    }
   }
 
   Widget _buildTextComposer() {
@@ -2703,27 +3222,45 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Row(
           children: [
             IconButton(
-              icon: Icon(Icons.mic),
+              icon: Icon(_inChatMode ? Icons.chat : Icons.mic),
+              color: _inChatMode ? Colors.green : null,
               onPressed: () {
-                // This would integrate with speech recognition
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Voice input coming soon!')),
-                );
+                if (_inChatMode) {
+                  // Show a hint for chat mode
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Chat mode active! Try asking me about my hobbies or tell me about your day.'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                } else {
+                  // Voice input placeholder
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Voice input coming soon!')),
+                  );
+                }
               },
             ),
             Expanded(
               child: TextField(
                 controller: _controller,
                 decoration: InputDecoration(
-                  hintText: "Ask me about your files...",
+                  hintText: _inChatMode
+                      ? "Chat with Alex..."
+                      : "Ask me about your files...",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.grey[800]
-                      : Colors.grey[200],
+                  fillColor: _inChatMode
+                      ? (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.green.withOpacity(0.2)
+                          : Colors.green.withOpacity(0.1))
+                      : (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.grey[800]
+                          : Colors.grey[200]),
                   contentPadding:
                       EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
@@ -2732,6 +3269,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             IconButton(
               icon: Icon(Icons.send),
+              color: _inChatMode ? Colors.green : null,
               onPressed: () => _handleSubmitted(_controller.text),
             ),
           ],
@@ -2740,9 +3278,24 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // Add this method to scroll to the bottom of chat
+  void _scrollToBottom() {
+    // Use a small delay to ensure the UI has updated
+    Future.delayed(Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose(); // Add this line
     _assistant.stop();
     super.dispose();
   }
