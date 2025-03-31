@@ -2321,7 +2321,7 @@ class FileAssistant {
 // New class for more human-like conversation
 class OfflineChatAssistant {
   // Personal details to create a more human-like persona
-  final String name = "Alex";
+  final String name = "UCSS";
   final List<String> hobbies = ["photography", "hiking", "reading", "coding"];
   final Map<String, List<String>> knowledgeBase = {
     "interests": ["mobile apps", "AI", "technology", "productivity"],
@@ -2382,10 +2382,10 @@ class OfflineChatAssistant {
       "What do you call a factory that makes good products? A satisfactory!"
     ],
     "who_are_you": [
-      "I'm Alex, your personal file assistant. I help you manage files and we can chat about other things too!",
-      "I'm a digital assistant named Alex that specializes in file management, but I enjoy good conversation too.",
-      "Think of me as your file-organizing friend Alex who's always ready to chat!",
-      "I'm Alex, designed to help with your files but also happy to have a friendly conversation."
+      "I'm UCSS, your personal file assistant. I help you manage files and we can chat about other things too!",
+      "I'm a digital assistant named UCSS that specializes in file management, but I enjoy good conversation too.",
+      "Think of me as your file-organizing friend UCSS who's always ready to chat!",
+      "I'm UCSS, designed to help with your files but also happy to have a friendly conversation."
     ]
   };
 
@@ -2878,7 +2878,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages.add(ChatMessage(
           text:
-              "I'd love to chat! I'm Alex, by the way. What would you like to talk about?",
+              "I'd love to chat! I'm UCSS, by the way. What would you like to talk about?",
           isUser: false,
           files: [],
         ));
@@ -3003,7 +3003,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_inChatMode ? 'Chat with Alex' : 'Chat with Files AI'),
+        title: Text(_inChatMode ? 'Chat with UCSS' : 'Chat with Files AI'),
         actions: [
           // Add a TTS toggle button
           IconButton(
@@ -3324,7 +3324,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   hintText: _isListening
                       ? "Listening..."
                       : (_inChatMode
-                          ? "Chat with Alex..."
+                          ? "Chat with UCSS..."
                           : "Ask me about your files..."),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
