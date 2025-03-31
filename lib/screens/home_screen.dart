@@ -143,6 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Files'),
         elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
           if (_isIndexing)
             Padding(
@@ -210,34 +211,106 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
       floatingActionButton: _permissionGranted
-          ? FloatingActionButton(
-              onPressed: _showSearch,
-              child: const Icon(Icons.chat),
-              tooltip: 'Chat with AI Assistant',
+          ? Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        Theme.of(context).colorScheme.shadow.withOpacity(0.2),
+                    spreadRadius: 2,
+                    blurRadius: 5,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: FloatingActionButton(
+                  onPressed: _showSearch,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.chat,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ),
             )
           : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _permissionGranted
-          ? BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home_filled),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.folder),
-                  label: 'Browse',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.cleaning_services),
-                  label: 'Clean',
-                ),
-              ],
+          ? BottomAppBar(
+              shape: const CircularNotchedRectangle(),
+              notchMargin: 8.0,
+              color: Theme.of(context).colorScheme.surface,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  // Left side of FAB
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.home_filled,
+                            color: _selectedIndex == 0
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                          ),
+                          onPressed: () => setState(() => _selectedIndex = 0),
+                          tooltip: 'Home',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.folder,
+                            color: _selectedIndex == 1
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                          ),
+                          onPressed: () => setState(() => _selectedIndex = 1),
+                          tooltip: 'Browse',
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Right side of FAB
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            Icons.cleaning_services,
+                            color: _selectedIndex == 2
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                          ),
+                          onPressed: () => setState(() => _selectedIndex = 2),
+                          tooltip: 'Clean',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.settings),
+                          onPressed: () {
+                            // Implement settings navigation
+                          },
+                          tooltip: 'Settings',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             )
           : null,
     );

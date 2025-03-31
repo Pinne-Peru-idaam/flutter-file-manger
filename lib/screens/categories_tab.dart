@@ -40,6 +40,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Downloads',
                   icon: Icons.download,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.blue,
                   onTap: () {
                     Navigator.push(
@@ -56,6 +58,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Images',
                   icon: Icons.image,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.purple,
                   onTap: () {
                     Navigator.push(
@@ -72,6 +76,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Videos',
                   icon: Icons.video_library,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.red,
                   onTap: () {
                     Navigator.push(
@@ -88,6 +94,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Audio',
                   icon: Icons.music_note,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.orange,
                   onTap: () {
                     Navigator.push(
@@ -110,6 +118,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Documents',
                   icon: Icons.description,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.teal,
                   onTap: () {
                     Navigator.push(
@@ -126,6 +136,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Archives',
                   icon: Icons.archive,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
                   color: Colors.brown,
                   onTap: () {
                     Navigator.push(

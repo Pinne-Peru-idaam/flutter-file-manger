@@ -4,6 +4,7 @@ class CategoryItem extends StatelessWidget {
   final String title;
   final IconData icon;
   final Color color;
+  final Color backgroundColor;
   final VoidCallback onTap;
 
   const CategoryItem({
@@ -12,12 +13,14 @@ class CategoryItem extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.onTap,
+    required this.backgroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       elevation: 2,
+      color: backgroundColor,
       child: InkWell(
         onTap: onTap,
         child: Padding(
