@@ -41,7 +41,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Downloads',
                   icon: Icons.download,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.blue,
                   onTap: () {
                     Navigator.push(
@@ -59,7 +59,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Images',
                   icon: Icons.image,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.purple,
                   onTap: () {
                     Navigator.push(
@@ -77,7 +77,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Videos',
                   icon: Icons.video_library,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.red,
                   onTap: () {
                     Navigator.push(
@@ -95,7 +95,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Audio',
                   icon: Icons.music_note,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.orange,
                   onTap: () {
                     Navigator.push(
@@ -119,7 +119,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Documents',
                   icon: Icons.description,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.teal,
                   onTap: () {
                     Navigator.push(
@@ -137,7 +137,7 @@ class CategoriesTab extends StatelessWidget {
                   title: 'Archives',
                   icon: Icons.archive,
                   backgroundColor:
-                      Theme.of(context).colorScheme.onSecondaryFixedVariant,
+                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.brown,
                   onTap: () {
                     Navigator.push(

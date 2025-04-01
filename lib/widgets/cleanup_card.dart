@@ -43,8 +43,9 @@ class CleanupCard extends StatelessWidget {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
+                backgroundColor:
+                    Theme.of(context).colorScheme.onPrimaryFixedVariant,
+                // foregroundColor: Colors.white,
               ),
               child: const Text('Clean'),
             ),
