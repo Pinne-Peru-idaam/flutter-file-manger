@@ -312,6 +312,14 @@ class FileIndex {
     }
   }
 
+  // Add a file to the index by path
+  Future<void> addFilePath(String filePath) async {
+    final file = File(filePath);
+    if (await file.exists()) {
+      await addFile(file);
+    }
+  }
+
   // Count files in a directory recursively
   Future<int> _countFilesInDirectory(String dirPath,
       {bool recursive = true}) async {

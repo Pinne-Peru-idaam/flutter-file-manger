@@ -7,13 +7,17 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:chat_bubbles/chat_bubbles.dart';
 import 'package:intl/intl.dart';
-import 'dart:io';
 import '../models/file_index.dart';
 import '../utils/conversion_utils.dart';
 import '../controllers/speech_controller.dart';
 import '../controllers/scroll_controller.dart';
 import '../services/file_service.dart';
 import '../services/groq_service.dart';
+import '../services/offline_ai_service.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion_pdf;
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:io';
 
 // File info class
 class FileInfo {
@@ -521,6 +525,155 @@ transformers
       throw Exception('Failed to check/install Python dependencies: $e');
     }
   }
+
+  // Summarize document content
+  Future<ChatMessage> summarizeDocument(FileInfo file) async {
+    try {
+      String content = "";
+      bool isPdf = file.path.toLowerCase().endsWith('.pdf');
+      bool isText = [
+        'txt',
+        'md',
+        'csv',
+        'json',
+        'html',
+        'xml',
+        'js',
+        'css',
+        'dart'
+      ].any((ext) => file.path.toLowerCase().endsWith('.$ext'));
+
+      // Extract content based on file type
+      if (isPdf) {
+        // Use the FileIndex's PDF extractor for PDFs
+        content = await _extractPdfContent(file.path);
+      } else if (isText) {
+        // Read text content for text files
+        final fileContent = await File(file.path).readAsString();
+        content = fileContent.length > 3000
+            ? fileContent.substring(0, 3000) + "..."
+            : fileContent;
+      } else {
+        // For non-summarizable files, just return file info
+        return ChatMessage(
+          text:
+              "This file type cannot be summarized. Would you like me to open it instead?",
+          isUser: false,
+          files: [file],
+          action: "open_file",
+        );
+      }
+
+      // If no content could be extracted, return a default message
+      if (content.isEmpty) {
+        return ChatMessage(
+          text:
+              "I couldn't extract any text from this file. Would you like me to open it for you?",
+          isUser: false,
+          files: [file],
+          action: "open_file",
+        );
+      }
+
+      String summary;
+      bool isOfflineMode = false;
+
+      try {
+        // First try using Groq for online summary
+        isOfflineMode = !(await _groqChatService.isOnline());
+
+        if (isOfflineMode) {
+          // Import OfflineAIService directly for offline summarization
+          final offlineAIService = OfflineAIService();
+          debugPrint('Using offline summarization for ${file.name}');
+          summary = await offlineAIService.summarizeOffline(content);
+        } else {
+          // Use online summarization with markdown formatting
+          String prompt = """
+Summarize the following document content in markdown format using:
+1. A top-level heading for the document title
+2. Second-level headings for main sections
+3. Bullet points for key points
+4. Code blocks for any code or technical content
+5. Bold or italic for emphasis
+
+Make the summary clear, concise, and well-structured. Focus on the main ideas and key information.
+
+Content to summarize: $content
+""";
+          summary = await _groqChatService.sendMessage(prompt);
+        }
+      } catch (e) {
+        debugPrint(
+            'Error in online summarization, falling back to offline: $e');
+        // Fallback to offline summarization on any error
+        try {
+          final offlineAIService = OfflineAIService();
+          summary = await offlineAIService.summarizeOffline(content);
+          isOfflineMode = true;
+        } catch (offlineError) {
+          // If even offline summarization fails, return error
+          return ChatMessage(
+            text:
+                "I encountered an error trying to summarize this document: $offlineError",
+            isUser: false,
+            files: [file],
+            action: "open_file",
+          );
+        }
+      }
+
+      // Ensure summary starts with a heading if it doesn't already
+      if (!summary.trimLeft().startsWith('#')) {
+        summary = "# Summary of ${file.name}\n\n$summary";
+      }
+
+      return ChatMessage(
+        text: "$summary\n\n*Would you like to open the full document?*",
+        isUser: false,
+        files: [file],
+        action: "open_file",
+      );
+    } catch (e) {
+      return ChatMessage(
+        text: "I encountered an error trying to summarize this document: $e",
+        isUser: false,
+        files: [file],
+        action: "open_file",
+      );
+    }
+  }
+
+  // Extract content from PDF
+  Future<String> _extractPdfContent(String path) async {
+    try {
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      final document = syncfusion_pdf.PdfDocument(inputBytes: bytes);
+      final extractor = syncfusion_pdf.PdfTextExtractor(document);
+
+      // Extract text from first few pages (limit to prevent oversized requests)
+      StringBuffer content = StringBuffer();
+      int pagesToExtract = document.pages.count > 5 ? 5 : document.pages.count;
+
+      for (int i = 0; i < pagesToExtract; i++) {
+        content
+            .write(extractor.extractText(startPageIndex: i, endPageIndex: i));
+        content.write("\n\n");
+
+        // Limit content size to 3000 characters
+        if (content.length > 3000) {
+          content.write("...(content truncated)");
+          break;
+        }
+      }
+
+      document.dispose();
+      return content.toString();
+    } catch (e) {
+      return "";
+    }
+  }
 }
 
 // Offline Chat Assistant class
@@ -1008,19 +1161,88 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageWidget(ChatMessage message) {
-    final textWidget = BubbleSpecialThree(
-      text: message.text,
-      color: message.isUser
-          ? Theme.of(context).colorScheme.primary
-          : Theme.of(context).colorScheme.secondary,
-      tail: true,
-      isSender: message.isUser,
-      textStyle: TextStyle(
+    // Check if this is a summary message (contains markdown formatting)
+    bool isSummary = !message.isUser &&
+        (message.text.contains('# ') ||
+            message.text.contains('## ') ||
+            message.text.contains('- ') ||
+            message.text.contains('*') ||
+            message.text.contains('```'));
+
+    Widget textWidget;
+
+    if (isSummary) {
+      // Create a markdown widget for summary content
+      textWidget = Card(
+        color: Theme.of(context).colorScheme.secondary,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              MarkdownBody(
+                data: message.text,
+                styleSheet: MarkdownStyleSheet(
+                  p: GoogleFonts.poppins(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  h1: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  h2: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  listBullet: GoogleFonts.poppins(
+                    fontSize: 15,
+                    color: Theme.of(context).colorScheme.onSecondary,
+                  ),
+                  code: GoogleFonts.robotoMono(
+                    fontSize: 14,
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                DateFormat('hh:mm a').format(DateTime.now()),
+                style: GoogleFonts.poppins(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSecondary
+                      .withOpacity(0.7),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      // Use regular chat bubble for non-summary content
+      textWidget = BubbleSpecialThree(
+        text: message.text,
         color: message.isUser
-            ? Colors.white
-            : Theme.of(context).colorScheme.onSecondary,
-      ),
-    );
+            ? Theme.of(context).colorScheme.primary
+            : Theme.of(context).colorScheme.secondary,
+        tail: true,
+        isSender: message.isUser,
+        textStyle: TextStyle(
+          color: message.isUser
+              ? Colors.white
+              : Theme.of(context).colorScheme.onSecondary,
+        ),
+      );
+    }
 
     // If there are files attached, show them
     if (message.files.isNotEmpty) {
@@ -1076,7 +1298,38 @@ class _ChatScreenState extends State<ChatScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: InkWell(
-        onTap: () => _handleFileAction(action, file),
+        onTap: () async {
+          // In file assistant mode and it's a document or PDF, generate a summary
+          if (!_inChatMode && (file.type == 'document' || file.type == 'pdf')) {
+            setState(() {
+              _isProcessing = true;
+            });
+
+            try {
+              final summaryMessage = await _assistant.summarizeDocument(file);
+              setState(() {
+                _messages.add(summaryMessage);
+              });
+            } catch (e) {
+              debugPrint('Error summarizing document: $e');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Error summarizing document: $e')),
+              );
+            } finally {
+              setState(() {
+                _isProcessing = false;
+              });
+              _scrollController.scrollToBottom();
+            }
+          } else {
+            // Otherwise, handle according to action or just open the file
+            if (action != null) {
+              _handleFileAction(action, file);
+            } else {
+              _openFile(file.path);
+            }
+          }
+        },
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Row(
@@ -1115,6 +1368,18 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ),
                   ),
+                  if ((file.type == 'document' || file.type == 'pdf') &&
+                      !_inChatMode)
+                    PopupMenuItem(
+                      value: 'summarize',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.summarize, size: 18),
+                          SizedBox(width: 8),
+                          Text('Summarize content'),
+                        ],
+                      ),
+                    ),
                   PopupMenuItem(
                     value: 'use_in_chat',
                     child: Row(
@@ -1140,6 +1405,28 @@ class _ChatScreenState extends State<ChatScreen> {
                 onSelected: (value) async {
                   if (value == 'open') {
                     await _openFile(file.path);
+                  } else if (value == 'summarize') {
+                    setState(() {
+                      _isProcessing = true;
+                    });
+
+                    try {
+                      final summaryMessage =
+                          await _assistant.summarizeDocument(file);
+                      setState(() {
+                        _messages.add(summaryMessage);
+                      });
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('Error summarizing document: $e')),
+                      );
+                    } finally {
+                      setState(() {
+                        _isProcessing = false;
+                      });
+                      _scrollController.scrollToBottom();
+                    }
                   } else if (value == 'use_in_chat') {
                     setState(() {
                       _controller.text = _suggestCommandForFile(file);
@@ -1491,14 +1778,36 @@ class _ChatScreenState extends State<ChatScreen> {
         _isProcessing = true;
       });
 
+      // Generate a title based on the content's first line or use a default
+      String title = 'Generated_Document';
+      if (content.contains('\n')) {
+        String firstLine = content.split('\n').first.trim();
+        if (firstLine.isNotEmpty) {
+          // Clean up the title and limit its length
+          title = firstLine
+              .replaceAll(RegExp(r'[^\w\s-]'), '') // Remove special characters
+              .trim()
+              .replaceAll(
+                  RegExp(r'\s+'), '_'); // Replace spaces with underscore
+
+          if (title.length > 50) {
+            title = title.substring(0, 50); // Limit title length
+          }
+        }
+      }
+
       final filePath = await _groqChatService.createPdf(
         content,
-        'Generated_Document_${DateTime.now().millisecondsSinceEpoch}',
+        title,
       );
+
+      // Index the new file if it was saved in an indexed location
+      await widget.fileIndex.addFilePath(filePath);
 
       setState(() {
         _messages.add(ChatMessage(
-          text: "PDF created successfully! You can find it at: $filePath",
+          text:
+              "PDF created successfully and saved to Downloads! You can find it at: $filePath",
           isUser: false,
           files: [
             FileInfo(
@@ -1507,6 +1816,7 @@ class _ChatScreenState extends State<ChatScreen> {
               type: 'pdf',
             )
           ],
+          action: "open_file", // Allow direct opening
         ));
       });
     } catch (e) {
@@ -1521,6 +1831,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _isProcessing = false;
       });
+      _scrollController.scrollToBottom();
     }
   }
 }

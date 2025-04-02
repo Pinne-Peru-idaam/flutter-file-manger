@@ -1,13 +1,34 @@
 import 'package:groq/groq.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:ui';
+import 'offline_ai_service.dart';
 
 class GroqChatService {
   final Groq groq;
+  final OfflineAIService _offlineService = OfflineAIService();
+  bool _offlineMode = false;
 
-  GroqChatService(String apiKey) : groq = Groq(apiKey: apiKey);
+  GroqChatService(String apiKey) : groq = Groq(apiKey: apiKey) {
+    // Initialize the offline service in the background
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    _offlineMode = !(await _offlineService.isOnline());
+    if (_offlineMode) {
+      debugPrint('GroqChatService: Operating in offline mode');
+      // Initialize MobileBERT model for offline use
+      await _offlineService.initModel();
+    }
+  }
+
+  // Check if we're online
+  Future<bool> isOnline() async {
+    return await _offlineService.isOnline();
+  }
 
   Future<void> startChat() async {
     groq.startChat();
@@ -77,16 +98,52 @@ class GroqChatService {
 
   Future<String> sendMessage(String message) async {
     try {
+      // Check connectivity status
+      await _checkConnectivity();
+
+      if (_offlineMode) {
+        // Use offline processing
+        debugPrint('Using offline mode for message processing');
+        return await _offlineService.generateResponse(message);
+      }
+
+      // Use online Groq API
       GroqResponse response = await groq.sendMessage(message);
       return response.choices.first.message.content;
     } on GroqException catch (error) {
+      // If we get a network-related error, try offline mode
+      if (error.message.contains('network') ||
+          error.message.contains('connect') ||
+          error.message.contains('timeout')) {
+        debugPrint('Network error with Groq, falling back to offline mode');
+        _offlineMode = true;
+        return await _offlineService.generateResponse(message);
+      }
       return "Error: ${error.message}";
+    } catch (e) {
+      // General fallback for any error
+      debugPrint('Unexpected error in sendMessage: $e');
+      _offlineMode = true;
+      return await _offlineService.generateResponse(message);
     }
   }
 
   Future<Map<String, dynamic>> generatePdfContent(
       String subject, int pages, List<String> sections) async {
     try {
+      // Check connectivity status
+      await _checkConnectivity();
+
+      if (_offlineMode) {
+        // Use offline processing for content generation
+        debugPrint('Using offline mode for PDF content generation');
+        String offlineContent = await _offlineService.generateResponse(
+            "Generate content for a $pages-page PDF about $subject with these sections: ${sections.join(', ')}.");
+
+        return {'success': true, 'content': offlineContent, 'offline': true};
+      }
+
+      // Use online Groq API
       String prompt =
           "Generate detailed content for a $pages-page PDF about $subject. "
           "Include the following sections: ${sections.join(', ')}. "
@@ -96,12 +153,26 @@ class GroqChatService {
       return {
         'success': true,
         'content': response.choices.first.message.content,
+        'offline': false
       };
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      // Fall back to offline mode on error
+      debugPrint(
+          'Error generating PDF content, falling back to offline mode: $e');
+      _offlineMode = true;
+
+      try {
+        String offlineContent = await _offlineService.generateResponse(
+            "Generate content for a $pages-page PDF about $subject with these sections: ${sections.join(', ')}.");
+
+        return {'success': true, 'content': offlineContent, 'offline': true};
+      } catch (fallbackError) {
+        return {
+          'success': false,
+          'error': fallbackError.toString(),
+          'offline': true
+        };
+      }
     }
   }
 
@@ -136,10 +207,33 @@ class GroqChatService {
                   page.getClientSize().height - 60),
               format: PdfLayoutFormat(layoutType: PdfLayoutType.paginate))!;
 
+      // Get the bytes from the document
+      List<int> bytes = await document.save();
+
+      // Define the file path in Downloads folder
+      String filePath;
+      if (Platform.isAndroid) {
+        // Get external storage directory (for Android)
+        Directory? directory = await getExternalStorageDirectory();
+        if (directory != null) {
+          // Navigate to the Downloads folder
+          String downloadsPath = directory.path.replaceAll(
+              '/Android/data/com.example.flutter_file_manger/files',
+              '/Download');
+          filePath = '$downloadsPath/${title.replaceAll(' ', '_')}.pdf';
+        } else {
+          // Fallback to app documents directory
+          final appDocsDir = await getApplicationDocumentsDirectory();
+          filePath = '${appDocsDir.path}/${title.replaceAll(' ', '_')}.pdf';
+        }
+      } else {
+        // For other platforms (iOS, etc.), use documents directory
+        final appDocsDir = await getApplicationDocumentsDirectory();
+        filePath = '${appDocsDir.path}/${title.replaceAll(' ', '_')}.pdf';
+      }
+
       // Save the PDF
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/${title.replaceAll(' ', '_')}.pdf';
-      File(filePath).writeAsBytes(await document.save());
+      File(filePath).writeAsBytes(bytes);
 
       // Dispose the document
       document.dispose();
