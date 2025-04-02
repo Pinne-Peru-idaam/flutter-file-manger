@@ -21,11 +21,52 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0; // For bottom navigation
   final FileIndex _fileIndex = FileIndex();
   bool _isIndexing = false;
+  double _indexingProgress = 0.0;
+  String _currentFileBeingIndexed = "";
+  int _totalFiles = 0;
+  int _processedFiles = 0;
 
   @override
   void initState() {
     super.initState();
+    _loadSavedIndexData();
     _requestPermission();
+
+    // Set progress callback
+    _fileIndex.onIndexingProgress = _updateProgress;
+  }
+
+  void _updateProgress(double progress, String currentFile) {
+    setState(() {
+      _indexingProgress = progress;
+      _currentFileBeingIndexed = currentFile;
+      _processedFiles = _fileIndex.filesIndexed;
+      _totalFiles = _fileIndex.totalFilesToIndex;
+      _isIndexing = _fileIndex.isIndexing;
+    });
+  }
+
+  Future<void> _loadSavedIndexData() async {
+    try {
+      final bool hasData = await _fileIndex.loadIndexedData();
+      if (hasData) {
+        // Validate that the indexed files still exist
+        final bool isValid = await _fileIndex.validateIndex();
+        if (!isValid) {
+          // If invalid, we'll reindex when permissions are granted
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Index data has changed, reindexing files...')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Loaded indexed data from storage')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading saved index data: $e');
+    }
   }
 
   Future<void> _requestPermission() async {
@@ -115,10 +156,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _startFileIndexing() async {
-    if (_isIndexing) return;
+    if (_fileIndex.isIndexing) return;
+
+    // Reset progress tracking
+    _fileIndex.resetIndexingProgress();
 
     setState(() {
       _isIndexing = true;
+      _indexingProgress = 0.0;
+      _currentFileBeingIndexed = "";
+      _processedFiles = 0;
+      _totalFiles = 0;
     });
 
     try {
@@ -128,6 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
       await _fileIndex.indexDirectory('/storage/emulated/0/Pictures');
       await _fileIndex.indexDirectory('/storage/emulated/0/Documents');
       await _fileIndex.indexDirectory('/storage/emulated/0/Music');
+
+      // Save indexed data when complete
+      await _fileIndex.saveIndexedData();
     } catch (e) {
       debugPrint('Error during file indexing: $e');
     } finally {
@@ -145,18 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
         actions: [
-          if (_isIndexing)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+          if (_isIndexing) _buildIndexingIndicator(),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: _showSearch,
@@ -167,81 +207,78 @@ class _HomeScreenState extends State<HomeScreen> {
               showMenu(
                 context: context,
                 position: const RelativeRect.fromLTRB(100, 100, 0, 0),
-                items: const [
-                  PopupMenuItem(
+                items: [
+                  const PopupMenuItem(
                     value: 'settings',
                     child: Text('Settings'),
                   ),
                   PopupMenuItem(
+                    value: 'reindex',
+                    child: Row(
+                      children: const [
+                        Icon(Icons.refresh, size: 20),
+                        SizedBox(width: 8),
+                        Text('Reindex files'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
                     value: 'help',
                     child: Text('Help & feedback'),
                   ),
                 ],
-              );
+                elevation: 8,
+              ).then((value) {
+                if (value == 'reindex') {
+                  _startFileIndexing();
+                } else if (value == 'settings') {
+                  // TODO: Show settings
+                } else if (value == 'help') {
+                  // TODO: Show help
+                }
+              });
             },
           ),
         ],
       ),
-      body: _permissionGranted
-          ? _getSelectedPage()
-          : Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.folder_off,
-                    size: 72,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Storage permission is required',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _requestPermission,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 12),
-                    ),
-                    child: const Text('Grant Permission'),
-                  ),
-                ],
-              ),
-            ),
-      floatingActionButton: _permissionGranted
-          ? Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        Theme.of(context).colorScheme.shadow.withOpacity(0.2),
-                    spreadRadius: 2,
-                    blurRadius: 5,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: FloatingActionButton(
-                  onPressed: _showSearch,
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    Icons.chat,
-                    color: Theme.of(context).colorScheme.onPrimary,
+      body: Stack(
+        children: [
+          // Main content
+          _permissionGranted
+              ? _getSelectedPage()
+              : Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.folder_off,
+                        size: 72,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Storage permission is required',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _requestPermission,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                        ),
+                        child: const Text('Grant Permission'),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+          // Indexing overlay
+          if (_isIndexing && _indexingProgress > 0) _buildIndexingOverlay(),
+        ],
+      ),
+      floatingActionButton: null,
+      floatingActionButtonLocation: null,
       bottomNavigationBar: _permissionGranted
           ? BottomAppBar(
               shape: const CircularNotchedRectangle(),
@@ -250,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  // Left side of FAB
+                  // Left side buttons
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -282,7 +319,60 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  // Right side of FAB
+
+                  // Center button (Chat)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .shadow
+                              .withOpacity(0.2),
+                          spreadRadius: 2,
+                          blurRadius: 5,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Material(
+                        color: Theme.of(context).colorScheme.primary,
+                        child: InkWell(
+                          onTap: _showSearch,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.chat,
+                                  color:
+                                      Theme.of(context).colorScheme.onPrimary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Chat',
+                                  style: TextStyle(
+                                    color:
+                                        Theme.of(context).colorScheme.onPrimary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Right side buttons
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -316,6 +406,100 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildIndexingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              value: _indexingProgress > 0 ? _indexingProgress : null,
+              color: Colors.white,
+            ),
+          ),
+          if (_processedFiles > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                "$_processedFiles",
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIndexingOverlay() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Indexing Files',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$_processedFiles / $_totalFiles',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: _indexingProgress,
+              backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _currentFileBeingIndexed,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _getSelectedPage() {
     switch (_selectedIndex) {
       case 0:
@@ -333,7 +517,10 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChatScreen(fileIndex: _fileIndex),
+        builder: (context) => ChatScreen(
+          fileIndex: _fileIndex,
+          apiKey: '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',
+        ),
       ),
     );
   }

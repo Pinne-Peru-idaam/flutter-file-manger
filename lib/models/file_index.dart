@@ -6,6 +6,7 @@ import 'package:pdf_render/pdf_render.dart' as pdf_render;
 import 'package:syncfusion_flutter_pdf/pdf.dart' as syncfusion_pdf;
 import 'dart:math' as math;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FileIndex {
   // Map to store file paths indexed by filename
@@ -17,6 +18,15 @@ class FileIndex {
   // Map to store file content and terms for semantic search
   final Map<String, String> _fileContentCache = {};
   final Map<String, List<String>> _fileTermsCache = {};
+
+  // Progress tracking
+  int _totalFilesToIndex = 0;
+  int _filesIndexed = 0;
+  String _currentFileBeingIndexed = "";
+  bool _isIndexing = false;
+
+  // Progress callback
+  Function(double progress, String currentFile)? onIndexingProgress;
 
   // Path to the model files
   static const String VOCAB_PATH = 'assets/vocab.txt';
@@ -36,6 +46,14 @@ class FileIndex {
     _instance ??= FileIndex._();
     return _instance!;
   }
+
+  // Getters for progress tracking
+  bool get isIndexing => _isIndexing;
+  int get totalFilesToIndex => _totalFilesToIndex;
+  int get filesIndexed => _filesIndexed;
+  String get currentFileBeingIndexed => _currentFileBeingIndexed;
+  double get indexingProgress =>
+      _totalFilesToIndex > 0 ? _filesIndexed / _totalFilesToIndex : 0.0;
 
   // Initialize model files
   Future<void> initializeModel() async {
@@ -258,6 +276,15 @@ class FileIndex {
         ? fileName.substring(fileName.lastIndexOf('.') + 1)
         : '';
 
+    // Set current file being indexed for progress reporting
+    _currentFileBeingIndexed = fileName;
+    _filesIndexed++;
+
+    // Report progress
+    if (onIndexingProgress != null) {
+      onIndexingProgress!(indexingProgress, fileName);
+    }
+
     // Index by filename
     if (!_fileNameIndex.containsKey(fileNameWithoutExt)) {
       _fileNameIndex[fileNameWithoutExt] = [];
@@ -285,11 +312,48 @@ class FileIndex {
     }
   }
 
+  // Count files in a directory recursively
+  Future<int> _countFilesInDirectory(String dirPath,
+      {bool recursive = true}) async {
+    int count = 0;
+    try {
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) return 0;
+
+      final List<FileSystemEntity> entities = await dir.list().toList();
+
+      for (var entity in entities) {
+        if (entity is File) {
+          count++;
+        } else if (recursive && entity is Directory) {
+          count += await _countFilesInDirectory(entity.path);
+        }
+      }
+    } catch (e) {
+      print('Error counting files in directory: $e');
+    }
+    return count;
+  }
+
   // Index all files in a directory recursively
   Future<void> indexDirectory(String dirPath, {bool recursive = true}) async {
     try {
       final dir = Directory(dirPath);
       if (!await dir.exists()) return;
+
+      // If already indexed and not forcing re-index, skip
+      if (_indexedDirectories.contains(dirPath)) {
+        return;
+      }
+
+      // Start indexing - update status
+      _isIndexing = true;
+
+      // First count total files (for progress tracking)
+      if (_totalFilesToIndex == 0) {
+        _totalFilesToIndex =
+            await _countFilesInDirectory(dirPath, recursive: recursive);
+      }
 
       _indexedDirectories.add(dirPath);
 
@@ -302,8 +366,16 @@ class FileIndex {
           await indexDirectory(entity.path);
         }
       }
+
+      // Finished indexing this directory
+      if (_filesIndexed >= _totalFilesToIndex) {
+        _isIndexing = false;
+        // Save indexed data
+        await saveIndexedData();
+      }
     } catch (e) {
       print('Error indexing directory: $e');
+      _isIndexing = false;
     }
   }
 
@@ -518,6 +590,172 @@ class FileIndex {
     }
   }
 
+  // Save indexed data to local storage
+  Future<void> saveIndexedData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Create a serializable version of file terms cache (most important data)
+      final Map<String, dynamic> serializedCache = {};
+      _fileTermsCache.forEach((path, terms) {
+        serializedCache[path] = terms;
+      });
+
+      // Store indexed directories
+      await prefs.setStringList(
+          'indexed_directories', _indexedDirectories.toList());
+
+      // Store file terms cache in chunks (could be large)
+      final String serialized = jsonEncode(serializedCache);
+
+      // If data is too large, split into chunks (SharedPreferences has size limits)
+      const int maxChunkSize = 500000; // ~500KB per chunk
+      if (serialized.length > maxChunkSize) {
+        // Clear any existing chunks
+        final keys = prefs.getKeys();
+        for (final key in keys) {
+          if (key.startsWith('file_terms_chunk_')) {
+            await prefs.remove(key);
+          }
+        }
+
+        // Save number of chunks
+        final int numChunks = (serialized.length / maxChunkSize).ceil();
+        await prefs.setInt('file_terms_chunks_count', numChunks);
+
+        // Save each chunk
+        for (int i = 0; i < numChunks; i++) {
+          final int start = i * maxChunkSize;
+          final int end = math.min((i + 1) * maxChunkSize, serialized.length);
+          final String chunk = serialized.substring(start, end);
+          await prefs.setString('file_terms_chunk_$i', chunk);
+        }
+      } else {
+        // Small enough to save as a single chunk
+        await prefs.setInt('file_terms_chunks_count', 1);
+        await prefs.setString('file_terms_chunk_0', serialized);
+      }
+
+      // Save timestamp of last indexing
+      await prefs.setInt(
+          'last_indexing_timestamp', DateTime.now().millisecondsSinceEpoch);
+
+      print('Indexed data saved to local storage');
+    } catch (e) {
+      print('Error saving indexed data: $e');
+    }
+  }
+
+  // Load indexed data from local storage
+  Future<bool> loadIndexedData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Check if we have saved data
+      if (!prefs.containsKey('indexed_directories') ||
+          !prefs.containsKey('file_terms_chunks_count')) {
+        return false;
+      }
+
+      // Load indexed directories
+      final List<String>? dirs = prefs.getStringList('indexed_directories');
+      if (dirs != null) {
+        _indexedDirectories.addAll(dirs);
+      }
+
+      // Load file terms cache from chunks
+      final int numChunks = prefs.getInt('file_terms_chunks_count') ?? 0;
+      if (numChunks > 0) {
+        final StringBuffer serialized = StringBuffer();
+        for (int i = 0; i < numChunks; i++) {
+          final String? chunk = prefs.getString('file_terms_chunk_$i');
+          if (chunk != null) {
+            serialized.write(chunk);
+          }
+        }
+
+        final Map<String, dynamic> serializedCache =
+            jsonDecode(serialized.toString()) as Map<String, dynamic>;
+
+        // Restore file terms cache
+        serializedCache.forEach((key, value) {
+          _fileTermsCache[key] = List<String>.from(value as List);
+        });
+
+        // Reconstruct filename and extension indexes
+        for (final filePath in _fileTermsCache.keys) {
+          final fileName = filePath.split('/').last.toLowerCase();
+          final fileNameWithoutExt = fileName.contains('.')
+              ? fileName.substring(0, fileName.lastIndexOf('.'))
+              : fileName;
+          final extension = fileName.contains('.')
+              ? fileName.substring(fileName.lastIndexOf('.') + 1)
+              : '';
+
+          // Add to filename index
+          if (!_fileNameIndex.containsKey(fileNameWithoutExt)) {
+            _fileNameIndex[fileNameWithoutExt] = [];
+          }
+          _fileNameIndex[fileNameWithoutExt]!.add(filePath);
+
+          // Add to extension index
+          if (extension.isNotEmpty) {
+            if (!_fileExtensionIndex.containsKey(extension)) {
+              _fileExtensionIndex[extension] = [];
+            }
+            _fileExtensionIndex[extension]!.add(filePath);
+          }
+        }
+
+        print('Loaded indexed data: ${_fileTermsCache.length} files');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('Error loading indexed data: $e');
+      return false;
+    }
+  }
+
+  // Check if index is still valid (files exist)
+  Future<bool> validateIndex() async {
+    int invalidFiles = 0;
+    final List<String> toRemove = [];
+
+    for (final filePath in _fileTermsCache.keys) {
+      if (!await File(filePath).exists()) {
+        toRemove.add(filePath);
+        invalidFiles++;
+      }
+    }
+
+    // Remove invalid files from cache
+    for (final path in toRemove) {
+      _fileTermsCache.remove(path);
+
+      // Also remove from other indexes
+      _fileNameIndex.forEach((key, value) {
+        value.remove(path);
+      });
+
+      _fileExtensionIndex.forEach((key, value) {
+        value.remove(path);
+      });
+    }
+
+    // If more than 30% of files are invalid, consider cache invalid
+    return invalidFiles < _fileTermsCache.length * 0.3;
+  }
+
+  // Reset indexing progress
+  void resetIndexingProgress() {
+    _totalFilesToIndex = 0;
+    _filesIndexed = 0;
+    _isIndexing = false;
+    _currentFileBeingIndexed = "";
+  }
+
   // Clear the index
   void clear() {
     _fileNameIndex.clear();
@@ -525,5 +763,6 @@ class FileIndex {
     _indexedDirectories.clear();
     _fileContentCache.clear();
     _fileTermsCache.clear();
+    resetIndexingProgress();
   }
 }

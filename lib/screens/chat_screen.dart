@@ -13,6 +13,7 @@ import '../utils/conversion_utils.dart';
 import '../controllers/speech_controller.dart';
 import '../controllers/scroll_controller.dart';
 import '../services/file_service.dart';
+import '../services/groq_service.dart';
 
 // File info class
 class FileInfo {
@@ -32,13 +33,16 @@ class ChatMessage {
   final String text;
   final bool isUser;
   final List<FileInfo> files;
-  final String? action;
+  final String?
+      action; // Can be: "open_file", "convert_pdf_to_image", "create_pdf"
+  final Map<String, dynamic>? pdfData; // For storing PDF creation details
 
   ChatMessage({
     required this.text,
     required this.isUser,
     required this.files,
     this.action,
+    this.pdfData,
   });
 }
 
@@ -46,6 +50,7 @@ class ChatMessage {
 class FileAssistant {
   final FileIndex fileIndex;
   final FlutterTts flutterTts = FlutterTts();
+  final GroqChatService _groqChatService;
 
   // Simple intent patterns for command recognition
   final Map<String, List<RegExp>> _intentPatterns = {
@@ -79,7 +84,9 @@ class FileAssistant {
     ],
   };
 
-  FileAssistant({required this.fileIndex}) {
+  FileAssistant(
+      {required this.fileIndex, required GroqChatService groqChatService})
+      : _groqChatService = groqChatService {
     _initTts();
   }
 
@@ -455,13 +462,21 @@ class FileAssistant {
 
   // Handle chat intent - redirects to the OfflineChatAssistant
   Future<ChatMessage> _handleChat(String query) async {
-    return ChatMessage(
-      text:
-          "Let's chat! I'm not just a file assistant - I'm happy to talk about other things too. How's your day going?",
-      isUser: false,
-      files: [],
-      action: "start_chat",
-    );
+    try {
+      String response = await _groqChatService.sendMessage(query);
+      return ChatMessage(
+        text: response,
+        isUser: false,
+        files: [],
+      );
+    } catch (e) {
+      return ChatMessage(
+        text:
+            "I apologize, but I encountered an error processing your request. Please try again.",
+        isUser: false,
+        files: [],
+      );
+    }
   }
 
   // Inside FileAssistant class
@@ -510,11 +525,16 @@ transformers
 
 // Offline Chat Assistant class
 class OfflineChatAssistant {
-  // Personal details to create a more human-like persona
-  final String name = "UCSS";
+  final GroqChatService _groqChatService;
+  final String name = "FileNexus";
   final List<String> hobbies = ["photography", "hiking", "reading", "coding"];
   final Map<String, List<String>> knowledgeBase = {
-    "interests": ["mobile apps", "AI", "technology", "productivity"],
+    "interests": [
+      "file management",
+      "organization",
+      "technology",
+      "productivity"
+    ],
     "facts": [
       "I'm always learning new things about files and organization",
       "I enjoy helping people find what they're looking for",
@@ -600,11 +620,128 @@ class OfflineChatAssistant {
         caseSensitive: false),
   };
 
-  // Generate a personal response based on the user's query
+  OfflineChatAssistant({required GroqChatService groqChatService})
+      : _groqChatService = groqChatService;
+
+  // Track PDF creation state
+  bool _isCreatingPdf = false;
+  Map<String, dynamic> _pdfCreationState = {
+    'subject': '',
+    'pages': 0,
+    'sections': <String>[],
+    'audience': '',
+  };
+
   Future<ChatMessage> processChat(String query) async {
     messageCount++;
 
-    // Check if we're already in personal mode or if the user wants to chat
+    // Continue PDF creation if in progress
+    if (_isCreatingPdf) {
+      if (_pdfCreationState['subject'].isEmpty) {
+        _pdfCreationState['subject'] = query;
+        return ChatMessage(
+          text:
+              "How many pages would you like the PDF to be? This will help me structure the content appropriately.",
+          isUser: false,
+          files: [],
+        );
+      }
+
+      if (_pdfCreationState['pages'] == 0) {
+        // Extract number from query (e.g., "make it 5 pages" -> 5)
+        RegExp regExp = RegExp(r'\d+');
+        Match? match = regExp.firstMatch(query);
+        if (match != null) {
+          _pdfCreationState['pages'] = int.parse(match.group(0)!);
+          return ChatMessage(
+            text: "What sections would you like to include? For example:\n"
+                "• Introduction\n"
+                "• Main concepts\n"
+                "• Examples\n"
+                "• Practice exercises\n"
+                "• References",
+            isUser: false,
+            files: [],
+          );
+        } else {
+          return ChatMessage(
+            text:
+                "Please specify the number of pages you'd like (e.g., '5 pages').",
+            isUser: false,
+            files: [],
+          );
+        }
+      }
+
+      if (_pdfCreationState['sections'].isEmpty) {
+        _pdfCreationState['sections'] =
+            query.split(',').map((s) => s.trim()).toList();
+        return ChatMessage(
+          text:
+              "Who is the target audience for this PDF? This will help me adjust the content's complexity and tone.",
+          isUser: false,
+          files: [],
+        );
+      }
+
+      if (_pdfCreationState['audience'].isEmpty) {
+        _pdfCreationState['audience'] = query;
+
+        // Generate content with all collected information
+        try {
+          String response = await _groqChatService.sendMessage(
+              "Create a ${_pdfCreationState['pages']}-page PDF about ${_pdfCreationState['subject']} "
+              "for ${_pdfCreationState['audience']}. Include these sections: ${_pdfCreationState['sections'].join(', ')}.\n"
+              "Please generate a detailed content outline following this structure:\n"
+              "1. Title\n"
+              "2. Introduction\n"
+              "3. Main sections (with subsections)\n"
+              "4. Examples and illustrations\n"
+              "5. Summary or conclusion");
+
+          // Reset PDF creation state
+          _isCreatingPdf = false;
+          _pdfCreationState = {
+            'subject': '',
+            'pages': 0,
+            'sections': <String>[],
+            'audience': '',
+          };
+
+          return ChatMessage(
+            text:
+                "I've prepared the content for your PDF. Here's what I've created:\n\n$response\n\n"
+                "Would you like me to create the PDF with this content? You can also request changes if needed.",
+            isUser: false,
+            files: [],
+            action: "create_pdf",
+          );
+        } catch (e) {
+          _isCreatingPdf = false;
+          return ChatMessage(
+            text:
+                "I apologize, but I encountered an error while generating the PDF content. Please try again.",
+            isUser: false,
+            files: [],
+          );
+        }
+      }
+    }
+
+    // Check for new PDF creation request
+    if (query.toLowerCase().contains('create a pdf') ||
+        query.toLowerCase().contains('make a pdf') ||
+        query.toLowerCase().contains('generate a pdf')) {
+      _isCreatingPdf = true;
+      return ChatMessage(
+        text:
+            "I'll help you create a PDF! What subject or topic would you like it to be about?",
+        isUser: false,
+        files: [],
+      );
+    }
+
+    // Continue with regular chat processing...
     if (!personalModeActive) {
       for (var pattern in _conversationPatterns.entries) {
         if (pattern.value.hasMatch(query.toLowerCase())) {
@@ -627,15 +764,12 @@ class OfflineChatAssistant {
       // Check for specific conversation patterns
       for (var entry in _conversationPatterns.entries) {
         if (entry.value.hasMatch(query.toLowerCase())) {
-          final responses = smallTalkResponses[entry.key] ?? [];
-          if (responses.isNotEmpty) {
-            final response = responses[messageCount % responses.length];
-            return ChatMessage(
-              text: response,
-              isUser: false,
-              files: [],
-            );
-          }
+          String response = await _groqChatService.sendMessage(query);
+          return ChatMessage(
+            text: response,
+            isUser: false,
+            files: [],
+          );
         }
       }
 
@@ -694,14 +828,23 @@ class OfflineChatAssistant {
     recentTopics.clear();
     messageCount = 0;
     personalModeActive = false;
+    _isCreatingPdf = false;
+    _pdfCreationState = {
+      'subject': '',
+      'pages': 0,
+      'sections': <String>[],
+      'audience': '',
+    };
   }
 }
 
 class ChatScreen extends StatefulWidget {
   final FileIndex fileIndex;
+  final String apiKey;
 
   const ChatScreen({
     required this.fileIndex,
+    required this.apiKey,
     super.key,
   });
 
@@ -716,6 +859,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<ChatMessage> _messages = [];
   late final FileAssistant _assistant;
   late final OfflineChatAssistant _chatAssistant;
+  late final GroqChatService _groqChatService;
   bool _isProcessing = false;
   bool _inChatMode = false;
   bool _ttsEnabled = true;
@@ -725,8 +869,13 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _assistant = FileAssistant(fileIndex: widget.fileIndex);
-    _chatAssistant = OfflineChatAssistant();
+    _groqChatService = GroqChatService(widget.apiKey);
+    _groqChatService.startChat();
+    _assistant = FileAssistant(
+      fileIndex: widget.fileIndex,
+      groqChatService: _groqChatService,
+    );
+    _chatAssistant = OfflineChatAssistant(groqChatService: _groqChatService);
     _initializeControllers();
     _addWelcomeMessage();
     _loadChatHistory();
@@ -742,11 +891,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _messages.add(ChatMessage(
       text:
           "Hi! I'm your file assistant. Here are some things you can ask me to do:\n\n"
+          "📁 File Assistant Mode:\n"
           "• \"Find my PDF files\"\n"
           "• \"Convert document.pdf to image\"\n"
           "• \"Show me my photos\"\n"
           "• \"What's in my Downloads folder?\"\n\n"
-          "You can also tap on any file to interact with it, or simply chat with me about anything! How can I help you today?",
+          "💬 Chat Mode Examples:\n"
+          "• \"Create a PDF about Flutter development best practices\"\n"
+          "• \"Generate a PDF study guide for Python programming\"\n"
+          "• \"Make a PDF about data structures with examples\"\n"
+          "• \"Create a technical documentation PDF for my project\"\n\n"
+          "You can switch between modes using the button in the top right corner. "
+          "In chat mode, I can help create detailed PDFs with custom content!\n\n"
+          "How can I help you today?",
       isUser: false,
       files: [],
     ));
@@ -771,14 +928,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
       setState(() {
         _messages.add(response);
+
+        // If the response contains a PDF creation request
+        if (response.action == "create_pdf") {
+          _showPdfConfirmationDialog(response.text);
+        }
+
         if (_ttsEnabled && !response.isUser) {
           _speechController.speak(response.text);
         }
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error processing chat: $e\n$stackTrace');
       setState(() {
         _messages.add(ChatMessage(
-          text: "Sorry, I encountered an error processing your request.",
+          text:
+              "I apologize, but I encountered an error. Please check your internet connection and try again.",
           isUser: false,
           files: [],
         ));
@@ -1130,8 +1295,17 @@ class _ChatScreenState extends State<ChatScreen> {
       _inChatMode = !_inChatMode;
       _messages.add(ChatMessage(
         text: _inChatMode
-            ? "Switched to chat mode. How can I help you?"
-            : "Switched to file assistant mode. What files can I help you with?",
+            ? "Switched to chat mode. You can now:\n\n"
+                "• Create custom PDFs (e.g., \"Create a PDF about machine learning basics\")\n"
+                "• Generate study materials (e.g., \"Make a PDF study guide for algorithms\")\n"
+                "• Create documentation (e.g., \"Generate a PDF about my project architecture\")\n\n"
+                "Just tell me what kind of PDF you need, and I'll help you create it!"
+            : "Switched to file assistant mode. You can now:\n\n"
+                "• Search for files\n"
+                "• Convert PDFs to images\n"
+                "• Open and manage files\n"
+                "• Organize your documents\n\n"
+                "What files can I help you with?",
         isUser: false,
         files: [],
       ));
@@ -1259,6 +1433,94 @@ class _ChatScreenState extends State<ChatScreen> {
         return "Can you transcribe ${file.name}?";
       default:
         return "Tell me more about ${file.name}";
+    }
+  }
+
+  void _showPdfConfirmationDialog(String content) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Create PDF'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Generated Content Preview:'),
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(content),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _messages.add(ChatMessage(
+                  text: "What changes would you like to make to the content?",
+                  isUser: false,
+                  files: [],
+                ));
+              },
+              child: Text('Request Changes'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _createPdf(content);
+              },
+              child: Text('Create PDF'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _createPdf(String content) async {
+    try {
+      setState(() {
+        _isProcessing = true;
+      });
+
+      final filePath = await _groqChatService.createPdf(
+        content,
+        'Generated_Document_${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      setState(() {
+        _messages.add(ChatMessage(
+          text: "PDF created successfully! You can find it at: $filePath",
+          isUser: false,
+          files: [
+            FileInfo(
+              path: filePath,
+              name: filePath.split('/').last,
+              type: 'pdf',
+            )
+          ],
+        ));
+      });
+    } catch (e) {
+      setState(() {
+        _messages.add(ChatMessage(
+          text: "Failed to create PDF: $e",
+          isUser: false,
+          files: [],
+        ));
+      });
+    } finally {
+      setState(() {
+        _isProcessing = false;
+      });
     }
   }
 }
