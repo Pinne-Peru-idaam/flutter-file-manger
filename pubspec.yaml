@@ -2,7 +2,7 @@ name: flutter_file_manger
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  path: ^1.8.0  
+  path: ^1.8.0
   path_provider: ^2.0.15
   permission_handler: ^10.4.3
   intl: ^0.18.1
@@ -43,6 +43,7 @@ dependencies:
   pdf_render: ^1.4.12
   speech_to_text: ^6.3.0
   dynamic_color: ^1.6.8
+  syncfusion_flutter_pdf: ^22.2.12
 
 dev_dependencies:
   flutter_test:
@@ -60,7 +61,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

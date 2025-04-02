@@ -6,7 +6,7 @@ import 'package:app_settings/app_settings.dart';
 import '../models/file_index.dart';
 import '../screens/categories_tab.dart';
 import '../screens/browse_tab.dart';
-import '../screens/cleanup_screen.dart';
+// import '../screens/cleanup_screen.dart';
 import '../screens/chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -322,8 +322,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return const CategoriesTab();
       case 1:
         return const BrowseTab();
-      case 2:
-        return const CleanupScreen();
+      // case 2:
+      //   return const CleanupScreen();
       default:
         return const CategoriesTab();
     }

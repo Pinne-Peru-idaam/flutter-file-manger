@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import '../widgets/cleanup_card.dart';
+// import '../widgets/cleanup_card.dart';
 import '../widgets/category_section.dart';
 import '../widgets/category_item.dart';
 import '../screens/file_list_screen.dart';
@@ -32,7 +32,7 @@ class CategoriesTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const CleanupCard(),
+            // const CleanupCard(),
             const SizedBox(height: 16),
             CategorySection(
               title: 'Storage',
