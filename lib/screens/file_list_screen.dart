@@ -20,7 +20,6 @@ class FileListScreen extends StatefulWidget {
 class _FileListScreenState extends State<FileListScreen> {
   List<FileSystemEntity> _files = [];
   bool _isLoading = true;
-  List<String> _navigationHistory = [];
 
   @override
   void initState() {
@@ -45,29 +44,34 @@ class _FileListScreenState extends State<FileListScreen> {
           return a.path.toLowerCase().compareTo(b.path.toLowerCase());
         });
 
-        setState(() {
-          _files = entities;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _files = entities;
+            _isLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _files = [];
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _files = [];
           _isLoading = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading files: $e')),
+        );
       }
-    } catch (e) {
-      setState(() {
-        _files = [];
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading files: $e')),
-      );
     }
   }
 
   void _navigateToDirectory(String path) {
-    _navigationHistory.add(widget.directoryPath);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -110,80 +114,62 @@ class _FileListScreenState extends State<FileListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        if (_navigationHistory.isNotEmpty) {
-          String previousPath = _navigationHistory.removeLast();
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => FileListScreen(
-                title: previousPath.split('/').last,
-                directoryPath: previousPath,
-              ),
-            ),
-          );
-          return false;
-        }
-        return true;
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.sort),
-              onPressed: () {
-                // Implement sorting functionality
-              },
-            ),
-          ],
-        ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _files.isEmpty
-                ? const Center(child: Text('No files found'))
-                : ListView.builder(
-                    itemCount: _files.length,
-                    itemBuilder: (context, index) {
-                      final file = _files[index];
-                      final fileName = file.path.split('/').last;
-                      final isDirectory = file is Directory;
-
-                      return ListTile(
-                        leading: Icon(
-                          isDirectory ? Icons.folder : _getFileIcon(fileName),
-                          color: isDirectory ? Colors.amber : Colors.blue,
-                        ),
-                        title: Text(fileName),
-                        subtitle: FutureBuilder<FileStat>(
-                          future: file.stat(),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const Text('Loading...');
-                            }
-
-                            final stat = snapshot.data!;
-                            final modified = DateFormat('MMM dd, yyyy')
-                                .format(stat.modified);
-                            final size =
-                                isDirectory ? '' : _formatFileSize(stat.size);
-
-                            return Text(
-                                '$modified${size.isNotEmpty ? ' • $size' : ''}');
-                          },
-                        ),
-                        onTap: () {
-                          if (isDirectory) {
-                            _navigateToDirectory(file.path);
-                          } else {
-                            OpenFile.open(file.path);
-                          }
-                        },
-                      );
-                    },
-                  ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: () {
+              // Implement sorting functionality
+            },
+          ),
+        ],
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _files.isEmpty
+              ? const Center(child: Text('No files found'))
+              : ListView.builder(
+                  itemCount: _files.length,
+                  itemBuilder: (context, index) {
+                    final file = _files[index];
+                    final fileName = file.path.split('/').last;
+                    final isDirectory = file is Directory;
+
+                    return ListTile(
+                      leading: Icon(
+                        isDirectory ? Icons.folder : _getFileIcon(fileName),
+                        color: isDirectory ? Colors.amber : Colors.blue,
+                      ),
+                      title: Text(fileName),
+                      subtitle: FutureBuilder<FileStat>(
+                        future: file.stat(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const Text('Loading...');
+                          }
+
+                          final stat = snapshot.data!;
+                          final modified = DateFormat('MMM dd, yyyy')
+                              .format(stat.modified);
+                          final size =
+                              isDirectory ? '' : _formatFileSize(stat.size);
+
+                          return Text(
+                              '$modified${size.isNotEmpty ? ' • $size' : ''}');
+                        },
+                      ),
+                      onTap: () {
+                        if (isDirectory) {
+                          _navigateToDirectory(file.path);
+                        } else {
+                          OpenFile.open(file.path);
+                        }
+                      },
+                    );
+                  },
+                ),
     );
   }
 }
