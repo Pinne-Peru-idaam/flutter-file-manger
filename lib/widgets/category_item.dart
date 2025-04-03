@@ -31,7 +31,7 @@ class CategoryItem extends StatelessWidget {
                   ? Icon(
                       icon as IconData,
                       color: color,
-                      size: 32,
+                      size: 20,
                     )
                   : icon,
               const SizedBox(width: 24),

@@ -30,18 +30,18 @@ class CategoriesTab extends StatelessWidget {
         final basePath = snapshot.data!;
 
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           children: [
             // const CleanupCard(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             CategorySection(
               title: 'Categories',
               items: [
                 CategoryItem(
                   title: 'Downloads',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/download-01.png',
                       color: Colors.blue,
@@ -65,8 +65,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Images',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/image-05.png',
                       color: Colors.blue,
@@ -90,8 +90,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Videos',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/video-recorder.png',
                       color: Colors.blue,
@@ -115,8 +115,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Audio',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/recording-01.png',
                       color: Colors.blue,
@@ -140,8 +140,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Documents',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/file-attachment-02.png',
                       color: Colors.blue,
@@ -165,8 +165,8 @@ class CategoriesTab extends StatelessWidget {
                 CategoryItem(
                   title: 'Archives',
                   icon: SizedBox(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     child: Image.asset(
                       'assets/icons/archive.png',
                       color: Colors.blue,

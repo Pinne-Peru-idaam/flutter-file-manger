@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -9,6 +10,8 @@ import '../screens/browse_tab.dart';
 // import '../screens/cleanup_screen.dart';
 import '../screens/events_screen.dart';
 import '../screens/chat_screen.dart';
+import '../widgets/recent_section.dart';
+import '../widgets/search_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,6 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Set progress callback
     _fileIndex.onIndexingProgress = _updateProgress;
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   void _updateProgress(double progress, String currentFile) {
@@ -193,15 +201,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Files'),
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
+        toolbarHeight: 80,
+        title: SearchBarWidget(
+          onTap: _showSearch,
+        ),
         actions: [
           if (_isIndexing) _buildIndexingIndicator(),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _showSearch,
-          ),
           IconButton(
             icon: const Icon(Icons.more_vert),
             onPressed: () {
@@ -246,7 +253,14 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Main content
           _permissionGranted
-              ? _getSelectedPage()
+              ? Column(
+                  children: [
+                    const RecentSection(),
+                    Expanded(
+                      child: _getSelectedPage(),
+                    ),
+                  ],
+                )
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
