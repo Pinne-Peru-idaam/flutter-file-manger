@@ -22,7 +22,7 @@ class CategoryCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.all(6),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(20, 12, 24, 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
