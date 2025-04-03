@@ -35,7 +35,7 @@ class CategoriesTab extends StatelessWidget {
             // const CleanupCard(),
             const SizedBox(height: 16),
             CategorySection(
-              title: 'Storage',
+              title: 'Categories',
               items: [
                 CategoryItem(
                   title: 'Downloads',
@@ -137,12 +137,6 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            CategorySection(
-              title: 'Categories',
-              items: [
                 CategoryItem(
                   title: 'Documents',
                   icon: SizedBox(

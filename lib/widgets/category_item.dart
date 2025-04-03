@@ -34,13 +34,14 @@ class CategoryItem extends StatelessWidget {
                       size: 32,
                     )
                   : icon,
+              const SizedBox(width: 24),
               Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                   ),
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                 ),
               ),
             ],
