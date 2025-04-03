@@ -16,35 +16,25 @@ class CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.all(6),
-        padding: const EdgeInsets.fromLTRB(20, 12, 24, 12),
+        padding: const EdgeInsets.fromLTRB(20, 8, 24, 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
+            colors: [
+              Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              Theme.of(context).colorScheme.secondary.withOpacity(0.1),
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: isDark ? [
-              const Color(0xFF1A3048).withOpacity(0.8),
-              const Color(0xFF0D1B29).withOpacity(0.8),
-            ] : [
-              const Color(0xFFE6F0FF).withOpacity(0.8),
-              const Color(0xFFD1E5FF).withOpacity(0.8),
-            ],
           ),
           borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: isDark 
-                ? Colors.black.withOpacity(0.2)
-                : Colors.grey.withOpacity(0.2),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
@@ -52,29 +42,27 @@ class CategoryCard extends StatelessWidget {
               imagePath,
               width: 20,
               height: 20,
-              color: isDark ? Colors.white : Colors.black87,
+              color: Theme.of(context).colorScheme.primary,
             ),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black87,
+                      color: Theme.of(context).colorScheme.onSurface,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     size,
                     style: TextStyle(
-                      color: isDark 
-                        ? Colors.white.withOpacity(0.7)
-                        : Colors.black87.withOpacity(0.7),
-                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11,
                     ),
                   ),
                 ],
