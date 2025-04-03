@@ -32,21 +32,22 @@ dependencies:
     sdk: flutter
   path: ^1.8.0
   path_provider: ^2.0.15
-  permission_handler: ^10.4.3
-  intl: ^0.18.1
-  device_info_plus: ^9.0.2
+  permission_handler: ^11.3.0
+  intl: ^0.20.2
+  device_info_plus: ^11.3.3
   app_settings: ^5.0.0
   open_file: ^3.3.2
   chat_bubbles: ^1.5.0
-  flutter_tts: ^3.8.5
+  flutter_tts: ^4.2.2
   shared_preferences: ^2.2.2
-  pdf_render: ^1.4.12
-  speech_to_text: ^6.3.0
+ # pdf_render: ^1.5.0
+  speech_to_text: ^7.0.0
   dynamic_color: ^1.6.8
-  syncfusion_flutter_pdf: ^22.2.12
-  flutter_markdown: ^0.6.10
+  syncfusion_flutter_pdf: ^29.1.35
+  flutter_markdown: ^0.7.7
   google_fonts: ^6.1.0
-  groq: ^0.0.7
+  groq: ^1.0.0
+  pdf_render: ^1.4.12
 
 dev_dependencies:
   flutter_test:

@@ -11,7 +11,7 @@ class GroqChatService {
   final OfflineAIService _offlineService = OfflineAIService();
   bool _offlineMode = false;
 
-  GroqChatService(String apiKey) : groq = Groq(apiKey: apiKey) {
+  GroqChatService(String apiKey) : groq = Groq(apiKey: apiKey, model: 'mixtral-8x7b-32768') {
     // Initialize the offline service in the background
     _checkConnectivity();
   }

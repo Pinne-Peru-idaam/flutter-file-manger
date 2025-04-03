@@ -144,11 +144,12 @@ class FileIndex {
   // Extract PDF metadata as a fallback
   Future<Map<String, dynamic>> extractPdfMetadata(String pdfPath) async {
     try {
-      final pdfDocument = await pdf_render.PdfDocument.openFile(pdfPath);
+      // Comment out pdf_render usage
+      // final pdfDocument = await pdf_render.PdfDocument.openFile(pdfPath);
 
       // Extract basic metadata
       final metadata = {
-        'pageCount': pdfDocument.pageCount,
+        'pageCount': 0, // Previously: pdfDocument.pageCount,
         'fileName': pdfPath.split('/').last,
         'filePath': pdfPath,
         'fileSize': await File(pdfPath).length(),
@@ -169,7 +170,7 @@ class FileIndex {
       }
 
       // Clean up
-      pdfDocument.dispose();
+      // pdfDocument.dispose();
 
       return metadata;
     } catch (e) {

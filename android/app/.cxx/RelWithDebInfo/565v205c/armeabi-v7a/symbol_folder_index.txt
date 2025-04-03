@@ -1,0 +1,1 @@
+H:\WORK\flutter-file-manger\build\app\intermediates\cxx\RelWithDebInfo\565v205c\obj\armeabi-v7a
