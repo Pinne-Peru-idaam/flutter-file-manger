@@ -39,7 +39,14 @@ class CategoriesTab extends StatelessWidget {
               items: [
                 CategoryItem(
                   title: 'Downloads',
-                  icon: Icons.download,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/download-01.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.blue,
@@ -57,7 +64,14 @@ class CategoriesTab extends StatelessWidget {
                 ),
                 CategoryItem(
                   title: 'Images',
-                  icon: Icons.image,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/image-05.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.purple,
@@ -75,7 +89,14 @@ class CategoriesTab extends StatelessWidget {
                 ),
                 CategoryItem(
                   title: 'Videos',
-                  icon: Icons.video_library,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/video-recorder.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.red,
@@ -93,7 +114,14 @@ class CategoriesTab extends StatelessWidget {
                 ),
                 CategoryItem(
                   title: 'Audio',
-                  icon: Icons.music_note,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/recording-01.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.orange,
@@ -117,7 +145,14 @@ class CategoriesTab extends StatelessWidget {
               items: [
                 CategoryItem(
                   title: 'Documents',
-                  icon: Icons.description,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/file-attachment-02.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.teal,
@@ -135,7 +170,14 @@ class CategoriesTab extends StatelessWidget {
                 ),
                 CategoryItem(
                   title: 'Archives',
-                  icon: Icons.archive,
+                  icon: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: Image.asset(
+                      'assets/icons/archive.png',
+                      color: Colors.blue,
+                    ),
+                  ),
                   backgroundColor:
                       Theme.of(context).colorScheme.onPrimaryFixedVariant,
                   color: Colors.brown,

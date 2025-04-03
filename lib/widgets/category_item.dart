@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class CategoryItem extends StatelessWidget {
   final String title;
-  final IconData icon;
+  final dynamic icon;
   final Color color;
   final Color backgroundColor;
   final VoidCallback onTap;
@@ -24,20 +24,23 @@ class CategoryItem extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.only(left: 16, right: 0, top: 0, bottom: 0),
+          child: Row(
             children: [
-              Icon(
-                icon,
-                color: color,
-                size: 32,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
+              icon is IconData
+                  ? Icon(
+                      icon as IconData,
+                      color: color,
+                      size: 32,
+                    )
+                  : icon,
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
