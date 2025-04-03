@@ -1,13 +1,12 @@
-import 'dart:io';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
+import '../services/appwrite_service.dart';
+import '../services/auth_service.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
@@ -29,7 +28,7 @@ class _EventsScreenState extends State<EventsScreen> {
   );
 
   final ImagePicker _picker = ImagePicker();
-  File? _selectedImage;
+  io.File? _selectedImage;
   List<Face>? _detectedFaces;
   Map<String, dynamic>? _faceFeatures;
   bool _processingImage = false;
@@ -40,6 +39,8 @@ class _EventsScreenState extends State<EventsScreen> {
   TextEditingController _eventNameController = TextEditingController();
   TextEditingController _eventCodeController = TextEditingController();
   TextEditingController _eventPasswordController = TextEditingController();
+
+  final AppwriteService _appwriteService = AppwriteService();
 
   @override
   void initState() {
@@ -75,14 +76,19 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<void> _loadEvents() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final eventsJson = prefs.getString('events');
-      if (eventsJson != null) {
-        final List<dynamic> decodedEvents = jsonDecode(eventsJson);
-        setState(() {
-          _events = decodedEvents.cast<Map<String, dynamic>>();
-        });
-      }
+      final documents = await _appwriteService.getEvents();
+      setState(() {
+        _events = documents
+            .map((doc) => {
+                  'id': doc.$id,
+                  'name': doc.data['name'],
+                  'code': doc.data['code'],
+                  'password': doc.data['password'],
+                  'created_at': doc.data['created_at'],
+                  'photos': doc.data['photos'] ?? [],
+                })
+            .toList();
+      });
     } catch (e) {
       debugPrint('Error loading events: $e');
     }
@@ -141,32 +147,52 @@ class _EventsScreenState extends State<EventsScreen> {
       return;
     }
 
-    // Generate a random event code
-    final random = Random();
-    final eventCode = List.generate(6, (_) => random.nextInt(10)).join();
+    try {
+      // Check authentication
+      if (!await _appwriteService.isAuthenticated()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please sign in to create events')),
+        );
+        Navigator.pushNamed(context, '/signin');
+        return;
+      }
 
-    final event = {
-      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-      'name': _eventNameController.text,
-      'code': eventCode,
-      'password': _eventPasswordController.text,
-      'created_at': DateTime.now().toIso8601String(),
-      'photos': [],
-    };
+      // Generate random event code
+      final random = Random();
+      final eventCode = List.generate(6, (_) => random.nextInt(10)).join();
 
-    setState(() {
-      _events.add(event);
-    });
+      final eventData = {
+        'name': _eventNameController.text,
+        'code': eventCode,
+        'password': _eventPasswordController.text,
+        'created_at': DateTime.now().toIso8601String(),
+        'photos': [],
+      };
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('events', jsonEncode(_events));
+      final document = await _appwriteService.createEvent(eventData);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Event created! Event code: $eventCode')),
-    );
+      setState(() {
+        _events.add({
+          'id': document.$id,
+          'name': _eventNameController.text,
+          'code': eventCode,
+          'password': _eventPasswordController.text,
+          'created_at': DateTime.now().toIso8601String(),
+          'photos': [],
+        });
+      });
 
-    _eventNameController.clear();
-    _eventPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Event created! Event code: $eventCode')),
+      );
+
+      _eventNameController.clear();
+      _eventPasswordController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error creating event: $e')),
+      );
+    }
   }
 
   Future<void> _joinEvent() async {
@@ -177,30 +203,54 @@ class _EventsScreenState extends State<EventsScreen> {
       return;
     }
 
-    final event = _events.firstWhere(
-      (e) => e['code'] == _eventCodeController.text,
-      orElse: () => {},
-    );
+    try {
+      final eventDoc =
+          await _appwriteService.getEventByCode(_eventCodeController.text);
 
-    if (event.isEmpty) {
+      if (eventDoc == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Event not found')),
+        );
+        return;
+      }
+
+      final event = {
+        'id': eventDoc.$id,
+        'name': eventDoc.data['name'],
+        'code': eventDoc.data['code'],
+        'password': eventDoc.data['password'],
+        'created_at': eventDoc.data['created_at'],
+        'photos': eventDoc.data['photos'] ?? [],
+      };
+
+      if (event['password'] != _eventPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Incorrect password')),
+        );
+        return;
+      }
+
+      // Fetch user's saved face features to filter photos
+      final authService = AuthService();
+      final userFaceFeatures = await authService.getFaceFeatures();
+
+      // Filter photos to only show matching ones
+      if (userFaceFeatures != null && event['photos'].isNotEmpty) {
+        // This would need actual face matching implementation
+        // For now, we'll just display all photos
+        debugPrint('Filtering photos based on face recognition');
+      }
+
+      // Show event photos
+      _showEventPhotos(event);
+
+      _eventCodeController.clear();
+      _eventPasswordController.clear();
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Event not found')),
+        SnackBar(content: Text('Error joining event: $e')),
       );
-      return;
     }
-
-    if (event['password'] != _eventPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect password')),
-      );
-      return;
-    }
-
-    // Show event photos
-    _showEventPhotos(event);
-
-    _eventCodeController.clear();
-    _eventPasswordController.clear();
   }
 
   void _showEventPhotos(Map<String, dynamic> event) {
@@ -237,7 +287,7 @@ class _EventsScreenState extends State<EventsScreen> {
                     ),
                     itemCount: (event['photos'] as List).length,
                     itemBuilder: (context, index) {
-                      final photoPath = event['photos'][index];
+                      final fileId = event['photos'][index];
                       return GestureDetector(
                         onTap: () {
                           // Show full-screen image
@@ -249,8 +299,8 @@ class _EventsScreenState extends State<EventsScreen> {
                                   title: Text('Photo ${index + 1}'),
                                 ),
                                 body: Center(
-                                  child: Image.file(
-                                    File(photoPath),
+                                  child: Image.network(
+                                    _appwriteService.getFileViewUrl(fileId),
                                     fit: BoxFit.contain,
                                   ),
                                 ),
@@ -260,8 +310,8 @@ class _EventsScreenState extends State<EventsScreen> {
                         },
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            File(photoPath),
+                          child: Image.network(
+                            _appwriteService.getFileViewUrl(fileId),
                             fit: BoxFit.cover,
                           ),
                         ),
@@ -280,41 +330,44 @@ class _EventsScreenState extends State<EventsScreen> {
     final result = await _picker.pickMultiImage();
     if (result.isEmpty) return;
 
-    final eventIndex = _events.indexWhere((e) => e['id'] == event['id']);
-    if (eventIndex == -1) return;
+    try {
+      final uploadedFileIds = <String>[];
 
-    final appDir = await getApplicationDocumentsDirectory();
-    final eventDir = Directory('${appDir.path}/events/${event['id']}');
-    if (!await eventDir.exists()) {
-      await eventDir.create(recursive: true);
+      for (final image in result) {
+        final file = io.File(image.path);
+        final uploadedFile =
+            await _appwriteService.uploadFile(file, event['id']);
+        uploadedFileIds.add(uploadedFile.$id);
+      }
+
+      // Update event document with new file IDs
+      final eventDoc = await _appwriteService.getEventByCode(event['code']);
+      if (eventDoc != null) {
+        final existingPhotos = eventDoc.data['photos'] ?? [];
+        final updatedPhotos = [...existingPhotos, ...uploadedFileIds];
+
+        await _appwriteService.databases.updateDocument(
+          databaseId: _appwriteService.databaseId,
+          collectionId: _appwriteService.collectionId,
+          documentId: eventDoc.$id,
+          data: {'photos': updatedPhotos},
+        );
+
+        // Update local state
+        final eventIndex = _events.indexWhere((e) => e['id'] == event['id']);
+        setState(() {
+          _events[eventIndex]['photos'] = updatedPhotos;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${uploadedFileIds.length} photos uploaded')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error uploading photos: $e')),
+      );
     }
-
-    final List<String> savedPaths = [];
-
-    for (final image in result) {
-      final imagePath = image.path;
-      final fileName = path.basename(imagePath);
-      final savedPath = '${eventDir.path}/$fileName';
-
-      // Copy the image to the event directory
-      await File(imagePath).copy(savedPath);
-
-      savedPaths.add(savedPath);
-    }
-
-    setState(() {
-      _events[eventIndex]['photos'] = [
-        ...(_events[eventIndex]['photos'] as List),
-        ...savedPaths,
-      ];
-    });
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('events', jsonEncode(_events));
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${savedPaths.length} photos uploaded')),
-    );
   }
 
   Future<void> _pickImage() async {
@@ -323,7 +376,7 @@ class _EventsScreenState extends State<EventsScreen> {
       if (image == null) return;
 
       setState(() {
-        _selectedImage = File(image.path);
+        _selectedImage = io.File(image.path);
         _detectedFaces = null;
         _faceFeatures = null;
         _processingImage = true;
@@ -691,7 +744,7 @@ class _EventsScreenState extends State<EventsScreen> {
 }
 
 class FacePainter extends CustomPainter {
-  final File image;
+  final io.File image;
   final List<Face> faces;
   final Size imageSize;
 
