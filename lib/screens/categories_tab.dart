@@ -3,7 +3,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 // import '../widgets/cleanup_card.dart';
 import '../widgets/category_section.dart';
-import '../widgets/category_item.dart';
+import '../widgets/category_card.dart';
 import '../screens/file_list_screen.dart';
 
 class CategoriesTab extends StatelessWidget {
@@ -34,22 +34,18 @@ class CategoriesTab extends StatelessWidget {
           children: [
             // const CleanupCard(),
             const SizedBox(height: 12),
-            CategorySection(
-              title: 'Categories',
-              items: [
-                CategoryItem(
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 2.5,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              children: [
+                CategoryCard(
                   title: 'Downloads',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/download-01.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.blue,
+                  size: '456 MB',
+                  imagePath: 'assets/icons/download-01.png',
                   onTap: () {
                     Navigator.push(
                       context,
@@ -62,19 +58,10 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-                CategoryItem(
+                CategoryCard(
                   title: 'Images',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/image-05.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.purple,
+                  size: '1.2 GB',
+                  imagePath: 'assets/icons/image-05.png',
                   onTap: () {
                     Navigator.push(
                       context,
@@ -87,19 +74,10 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-                CategoryItem(
+                CategoryCard(
                   title: 'Videos',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/video-recorder.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.red,
+                  size: '2.8 GB',
+                  imagePath: 'assets/icons/video-recorder.png',
                   onTap: () {
                     Navigator.push(
                       context,
@@ -112,19 +90,10 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-                CategoryItem(
+                CategoryCard(
                   title: 'Audio',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/recording-01.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.orange,
+                  size: '228 MB',
+                  imagePath: 'assets/icons/recording-01.png',
                   onTap: () {
                     Navigator.push(
                       context,
@@ -137,19 +106,10 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-                CategoryItem(
+                CategoryCard(
                   title: 'Documents',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/file-attachment-02.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.teal,
+                  size: '128 MB',
+                  imagePath: 'assets/icons/file-attachment-02.png',
                   onTap: () {
                     Navigator.push(
                       context,
@@ -162,19 +122,10 @@ class CategoriesTab extends StatelessWidget {
                     );
                   },
                 ),
-                CategoryItem(
+                CategoryCard(
                   title: 'Archives',
-                  icon: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Image.asset(
-                      'assets/icons/archive.png',
-                      color: Colors.blue,
-                    ),
-                  ),
-                  backgroundColor:
-                      Theme.of(context).colorScheme.onPrimaryFixedVariant,
-                  color: Colors.brown,
+                  size: '64 MB',
+                  imagePath: 'assets/icons/archive.png',
                   onTap: () {
                     Navigator.push(
                       context,
