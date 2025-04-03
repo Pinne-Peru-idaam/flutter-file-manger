@@ -49,6 +49,7 @@ flutter:
   assets:
     - assets/vocab.txt
     - assets/mobilebert_model.tflite
+    - assets/icons/
 
 # Flutter Launcher Icons configuration
 flutter_launcher_icons:

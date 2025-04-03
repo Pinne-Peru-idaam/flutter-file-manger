@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -9,6 +10,8 @@ import '../screens/browse_tab.dart';
 // import '../screens/cleanup_screen.dart';
 import '../screens/events_screen.dart';
 import '../screens/chat_screen.dart';
+import '../widgets/recent_section.dart';
+import '../widgets/search_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,6 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Set progress callback
     _fileIndex.onIndexingProgress = _updateProgress;
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   void _updateProgress(double progress, String currentFile) {
@@ -193,60 +201,77 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Files'),
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
+        toolbarHeight: 80,
+        title: SearchBarWidget(
+          onTap: _showSearch,
+          onMenuTap: () {
+            final RenderBox button = context.findRenderObject() as RenderBox;
+            final RenderBox overlay = Navigator.of(context)
+                .overlay!
+                .context
+                .findRenderObject() as RenderBox;
+            final RelativeRect position = RelativeRect.fromRect(
+              Rect.fromPoints(
+                button.localToGlobal(Offset.zero, ancestor: overlay),
+                button.localToGlobal(button.size.bottomRight(Offset.zero),
+                    ancestor: overlay),
+              ),
+              Offset.zero & overlay.size,
+            );
+
+            showMenu(
+              context: context,
+              position: position,
+              items: [
+                const PopupMenuItem(
+                  value: 'settings',
+                  child: Text('Settings'),
+                ),
+                PopupMenuItem(
+                  value: 'reindex',
+                  child: Row(
+                    children: const [
+                      Icon(Icons.refresh, size: 20),
+                      SizedBox(width: 8),
+                      Text('Reindex files'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'help',
+                  child: Text('Help & feedback'),
+                ),
+              ],
+              elevation: 8,
+            ).then((value) {
+              if (value == 'reindex') {
+                _startFileIndexing();
+              } else if (value == 'settings') {
+                // TODO: Show settings
+              } else if (value == 'help') {
+                // TODO: Show help
+              }
+            });
+          },
+        ),
         actions: [
           if (_isIndexing) _buildIndexingIndicator(),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: _showSearch,
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              showMenu(
-                context: context,
-                position: const RelativeRect.fromLTRB(100, 100, 0, 0),
-                items: [
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Settings'),
-                  ),
-                  PopupMenuItem(
-                    value: 'reindex',
-                    child: Row(
-                      children: const [
-                        Icon(Icons.refresh, size: 20),
-                        SizedBox(width: 8),
-                        Text('Reindex files'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'help',
-                    child: Text('Help & feedback'),
-                  ),
-                ],
-                elevation: 8,
-              ).then((value) {
-                if (value == 'reindex') {
-                  _startFileIndexing();
-                } else if (value == 'settings') {
-                  // TODO: Show settings
-                } else if (value == 'help') {
-                  // TODO: Show help
-                }
-              });
-            },
-          ),
         ],
       ),
       body: Stack(
         children: [
           // Main content
           _permissionGranted
-              ? _getSelectedPage()
+              ? Column(
+                  children: [
+                    const RecentSection(),
+                    Expanded(
+                      child: _getSelectedPage(),
+                    ),
+                  ],
+                )
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
