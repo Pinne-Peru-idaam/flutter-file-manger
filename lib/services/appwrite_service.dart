@@ -191,4 +191,73 @@ class AppwriteService {
       return false;
     }
   }
+
+  // Delete event and its associated photos
+  Future<bool> deleteEvent(String eventId, List<String> photoIds) async {
+    // Check authentication
+    if (!await isAuthenticated()) {
+      debugPrint('Authentication required for deleteEvent');
+      throw Exception('Authentication required');
+    }
+
+    try {
+      // Delete all associated photos first
+      for (final photoId in photoIds) {
+        await storage.deleteFile(bucketId: bucketId, fileId: photoId);
+        debugPrint('Deleted photo: $photoId');
+      }
+
+      // Delete the event document
+      await databases.deleteDocument(
+        databaseId: databaseId,
+        collectionId: collectionId,
+        documentId: eventId,
+      );
+
+      debugPrint('Event deleted successfully: $eventId');
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting event: $e');
+      rethrow;
+    }
+  }
+
+  // Upload file with progress tracking
+  Future<models.File> uploadFileWithProgress(
+      io.File file, String eventId, Function(double) onProgress) async {
+    // Check authentication first
+    if (!await isAuthenticated()) {
+      debugPrint('Authentication required for uploadFile');
+      throw Exception('Authentication required');
+    }
+
+    try {
+      final fileName = path.basename(file.path);
+      debugPrint('Uploading file: $fileName for event: $eventId');
+
+      // Use a simple workaround since onProgress isn't supported directly
+      // First read the file to get its size
+      final fileSize = await file.length();
+
+      // Create the file without progress tracking
+      final result = await storage.createFile(
+        bucketId: bucketId,
+        fileId: ID.unique(),
+        file: InputFile.fromPath(
+          path: file.path,
+          filename: '${eventId}_$fileName',
+        ),
+        onProgress: (uploaded) {
+          // Progress is already in percentage (0-100)
+          onProgress(uploaded.progress / 100);
+        },
+      );
+
+      debugPrint('File uploaded successfully: ${result.$id}');
+      return result;
+    } catch (e) {
+      debugPrint('Error uploading file: $e');
+      rethrow;
+    }
+  }
 }

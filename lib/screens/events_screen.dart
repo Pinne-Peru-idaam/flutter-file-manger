@@ -38,12 +38,16 @@ class _EventsScreenState extends State<EventsScreen> {
 
   final AppwriteService _appwriteService = AppwriteService();
 
+  List<Map<String, dynamic>> _joinedEvents = [];
+  Map<String, double> _uploadProgress = {};
+
   @override
   void initState() {
     super.initState();
     _initializeFaceApi();
     _loadSavedFaces();
     _loadEvents();
+    _loadJoinedEvents();
   }
 
   Future<void> _initializeFaceApi() async {
@@ -111,6 +115,21 @@ class _EventsScreenState extends State<EventsScreen> {
       });
     } catch (e) {
       debugPrint('Error loading events: $e');
+    }
+  }
+
+  Future<void> _loadJoinedEvents() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final joinedEventsJson = prefs.getString('joined_events');
+      if (joinedEventsJson != null) {
+        final List<dynamic> decodedEvents = jsonDecode(joinedEventsJson);
+        setState(() {
+          _joinedEvents = decodedEvents.cast<Map<String, dynamic>>();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading joined events: $e');
     }
   }
 
@@ -293,6 +312,8 @@ class _EventsScreenState extends State<EventsScreen> {
 
         // Show event photos that match the user's face
         _showEventPhotos(event, matchedPhotoIds);
+
+        await _saveJoinedEvent(event);
       } finally {
         setState(() {
           _processingImage = false;
@@ -433,12 +454,63 @@ class _EventsScreenState extends State<EventsScreen> {
     try {
       final uploadedFileIds = <String>[];
 
+      // Reset progress map
+      setState(() {
+        _uploadProgress = {};
+      });
+
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) =>
+            StatefulBuilder(builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text('Uploading Photos'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < result.length; i++)
+                  if (_uploadProgress.containsKey(result[i].path))
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Photo ${i + 1}:'),
+                          LinearProgressIndicator(
+                            value: _uploadProgress[result[i].path],
+                          ),
+                        ],
+                      ),
+                    ),
+              ],
+            ),
+          );
+        }),
+      );
+
       for (final image in result) {
+        // Initialize progress for this image
+        setState(() {
+          _uploadProgress[image.path] = 0;
+        });
+
         final file = io.File(image.path);
-        final uploadedFile =
-            await _appwriteService.uploadFile(file, event['id']);
+
+        // Upload with progress
+        final uploadedFile = await _appwriteService
+            .uploadFileWithProgress(file, event['id'], (progress) {
+          setState(() {
+            _uploadProgress[image.path] = progress;
+          });
+        });
+
         uploadedFileIds.add(uploadedFile.$id);
       }
+
+      // Close progress dialog
+      Navigator.of(context, rootNavigator: true).pop();
 
       // Update event document with new file IDs
       final eventDoc = await _appwriteService.getEventByCode(event['code']);
@@ -464,8 +536,90 @@ class _EventsScreenState extends State<EventsScreen> {
         SnackBar(content: Text('${uploadedFileIds.length} photos uploaded')),
       );
     } catch (e) {
+      // Close progress dialog if open
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error uploading photos: $e')),
+      );
+    }
+  }
+
+  Future<void> _saveJoinedEvent(Map<String, dynamic> event) async {
+    try {
+      // Check if event is already in joined events
+      final eventIndex =
+          _joinedEvents.indexWhere((e) => e['id'] == event['id']);
+
+      if (eventIndex == -1) {
+        // Only add if not already present
+        setState(() {
+          _joinedEvents.add(event);
+        });
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('joined_events', jsonEncode(_joinedEvents));
+
+        debugPrint('Event saved to joined events: ${event['name']}');
+      }
+    } catch (e) {
+      debugPrint('Error saving joined event: $e');
+    }
+  }
+
+  Future<void> _deleteEvent(Map<String, dynamic> event) async {
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Event'),
+        content: Text(
+            'Are you sure you want to delete "${event['name']}"? This will also delete all associated photos.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      setState(() {
+        _processingImage = true; // Use existing loading indicator
+      });
+
+      // Get photos list
+      final photos = event['photos'] as List<dynamic>;
+      final photoIds = photos.cast<String>();
+
+      // Delete event and photos
+      await _appwriteService.deleteEvent(event['id'], photoIds);
+
+      // Update local state
+      setState(() {
+        _events.removeWhere((e) => e['id'] == event['id']);
+        _processingImage = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Event "${event['name']}" deleted')),
+      );
+    } catch (e) {
+      setState(() {
+        _processingImage = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting event: $e')),
       );
     }
   }
@@ -520,6 +674,103 @@ class _EventsScreenState extends State<EventsScreen> {
       setState(() {
         _processingImage = false;
       });
+    }
+  }
+
+  Future<void> _refreshEventPhotos(Map<String, dynamic> event) async {
+    try {
+      // Show loading indicator
+      setState(() {
+        _processingImage = true;
+      });
+
+      // Get the latest event data to get any new photos
+      final eventDoc = await _appwriteService.getEventByCode(event['code']);
+      if (eventDoc == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Event not found')),
+        );
+        setState(() {
+          _processingImage = false;
+        });
+        return;
+      }
+
+      // Update the event photos list
+      final updatedPhotos = eventDoc.data['photos'] ?? [];
+
+      // Update our local copy of the event
+      final eventIndex =
+          _joinedEvents.indexWhere((e) => e['id'] == event['id']);
+      if (eventIndex != -1) {
+        setState(() {
+          _joinedEvents[eventIndex]['photos'] = updatedPhotos;
+        });
+
+        // Save updated joined events to local storage
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('joined_events', jsonEncode(_joinedEvents));
+      }
+
+      // Check if we have a face reference
+      if (_savedFaces.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Please add your face from the ADD EVENT tab first')),
+        );
+        setState(() {
+          _processingImage = false;
+        });
+        return;
+      }
+
+      // Use the most recent saved face for matching
+      final latestFace = _savedFaces.last;
+      final facePath = latestFace['imagePath'];
+
+      if (facePath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Invalid face reference, please add your face again')),
+        );
+        setState(() {
+          _processingImage = false;
+        });
+        return;
+      }
+
+      // Create reference face image for matching
+      final faceBytes = await io.File(facePath).readAsBytes();
+      final referenceImage = MatchFacesImage(faceBytes, ImageType.PRINTED);
+
+      // Match face with event photos
+      final matchedPhotoIds =
+          await _matchFaceWithEventPhotos(referenceImage, updatedPhotos);
+
+      // Store matched photos for this event
+      setState(() {
+        _matchedPhotos[event['id']] = matchedPhotoIds;
+        _processingImage = false;
+      });
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'Found ${matchedPhotoIds.length} photos matching your face')),
+      );
+
+      // Show event photos that match the user's face
+      _showEventPhotos(event, matchedPhotoIds);
+    } catch (e) {
+      setState(() {
+        _processingImage = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error refreshing photos: $e')),
+      );
     }
   }
 
@@ -700,6 +951,11 @@ class _EventsScreenState extends State<EventsScreen> {
                               onPressed: () => _showEventPhotos(event),
                               tooltip: 'View All Photos',
                             ),
+                            IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () => _deleteEvent(event),
+                              tooltip: 'Delete Event',
+                            ),
                           ],
                         ),
                       ),
@@ -777,6 +1033,50 @@ class _EventsScreenState extends State<EventsScreen> {
                   title: Text(face['name']),
                   subtitle: Text(
                       'Created: ${DateTime.parse(face['created_at']).toLocal().toString().split('.')[0]}'),
+                );
+              },
+            ),
+          const SizedBox(height: 32),
+          const Text(
+            'Joined Events',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_joinedEvents.isEmpty)
+            const Text('No joined events yet.')
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _joinedEvents.length,
+              itemBuilder: (context, index) {
+                final event = _joinedEvents[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(event['name']),
+                    subtitle: Text('Code: ${event['code']}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: () => _refreshEventPhotos(event),
+                          tooltip: 'Refresh Photos',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.photo_library),
+                          onPressed: () {
+                            final matchedIds = _matchedPhotos[event['id']];
+                            _showEventPhotos(event, matchedIds);
+                          },
+                          tooltip: 'View My Photos',
+                        ),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),
