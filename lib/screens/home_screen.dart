@@ -7,6 +7,7 @@ import '../models/file_index.dart';
 import '../screens/categories_tab.dart';
 import '../screens/browse_tab.dart';
 // import '../screens/cleanup_screen.dart';
+import '../screens/events_screen.dart';
 import '../screens/chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -379,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         IconButton(
                           icon: Icon(
-                            Icons.cleaning_services,
+                            Icons.local_activity,
                             color: _selectedIndex == 2
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(context)
@@ -506,8 +507,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return const CategoriesTab();
       case 1:
         return const BrowseTab();
-      // case 2:
-      //   return const CleanupScreen();
+      case 2:
+        return const EventsScreen();
       default:
         return const CategoriesTab();
     }
