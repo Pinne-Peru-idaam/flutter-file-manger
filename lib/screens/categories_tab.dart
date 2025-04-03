@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 // import '../widgets/cleanup_card.dart';
-import '../widgets/category_section.dart';
+// import '../widgets/category_section.dart';
 import '../widgets/category_card.dart';
 import '../screens/file_list_screen.dart';
 
@@ -34,6 +34,15 @@ class CategoriesTab extends StatelessWidget {
           children: [
             // const CleanupCard(),
             const SizedBox(height: 12),
+            Text(
+              'Categories',
+              style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+            ),
+            const SizedBox(height: 16),
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
