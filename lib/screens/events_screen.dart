@@ -1,8 +1,9 @@
 import 'dart:io' as io;
 import 'package:flutter/material.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:flutter_face_api/flutter_face_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import '../services/appwrite_service.dart';
@@ -16,24 +17,19 @@ class EventsScreen extends StatefulWidget {
 }
 
 class _EventsScreenState extends State<EventsScreen> {
-  final FaceDetector _faceDetector = FaceDetector(
-    options: FaceDetectorOptions(
-      enableContours: true,
-      enableLandmarks: true,
-      enableClassification: true,
-      enableTracking: true,
-      minFaceSize: 0.15,
-      performanceMode: FaceDetectorMode.accurate,
-    ),
-  );
+  // Face API instance
+  var faceSdk = FaceSDK.instance;
+  bool _faceApiInitialized = false;
 
   final ImagePicker _picker = ImagePicker();
   io.File? _selectedImage;
-  List<Face>? _detectedFaces;
   Map<String, dynamic>? _faceFeatures;
   bool _processingImage = false;
   List<Map<String, dynamic>> _savedFaces = [];
   List<Map<String, dynamic>> _events = [];
+  Map<String, List<String>> _matchedPhotos = {};
+
+  MatchFacesImage? _referenceImage;
 
   TextEditingController _nameController = TextEditingController();
   TextEditingController _eventNameController = TextEditingController();
@@ -45,13 +41,37 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeFaceApi();
     _loadSavedFaces();
     _loadEvents();
   }
 
+  Future<void> _initializeFaceApi() async {
+    try {
+      setState(() {
+        _processingImage = true;
+      });
+
+      final result = await faceSdk.initialize();
+      if (result.$1) {
+        setState(() {
+          _faceApiInitialized = true;
+        });
+        debugPrint("FaceAPI initialized successfully");
+      } else {
+        debugPrint("FaceAPI initialization failed: ${result.$2?.message}");
+      }
+    } catch (e) {
+      debugPrint("Error initializing FaceAPI: $e");
+    } finally {
+      setState(() {
+        _processingImage = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
-    _faceDetector.close();
     _nameController.dispose();
     _eventNameController.dispose();
     _eventCodeController.dispose();
@@ -85,9 +105,7 @@ class _EventsScreenState extends State<EventsScreen> {
                   'code': doc.data['code'],
                   'password': doc.data['password'],
                   'created_at': doc.data['created_at'],
-                  'photos': doc.data['photos'] != null
-                      ? jsonDecode(doc.data['photos'])
-                      : [],
+                  'photos': doc.data['photos'] ?? [],
                 })
             .toList();
       });
@@ -97,7 +115,7 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Future<void> _saveFace() async {
-    if (_faceFeatures == null) return;
+    if (_selectedImage == null || _referenceImage == null) return;
 
     try {
       if (_nameController.text.isEmpty) {
@@ -112,7 +130,7 @@ class _EventsScreenState extends State<EventsScreen> {
       final faceData = {
         'id': faceId,
         'name': _nameController.text,
-        'features': _faceFeatures,
+        'imagePath': _selectedImage!.path,
         'created_at': DateTime.now().toIso8601String(),
       };
 
@@ -130,8 +148,7 @@ class _EventsScreenState extends State<EventsScreen> {
       _nameController.clear();
       setState(() {
         _selectedImage = null;
-        _detectedFaces = null;
-        _faceFeatures = null;
+        _referenceImage = null;
       });
     } catch (e) {
       debugPrint('Error saving face: $e');
@@ -168,7 +185,7 @@ class _EventsScreenState extends State<EventsScreen> {
         'code': eventCode,
         'password': _eventPasswordController.text,
         'created_at': DateTime.now().toIso8601String(),
-        'photos': jsonEncode([]),
+        'photos': [],
       };
 
       final document = await _appwriteService.createEvent(eventData);
@@ -180,7 +197,7 @@ class _EventsScreenState extends State<EventsScreen> {
           'code': eventCode,
           'password': _eventPasswordController.text,
           'created_at': DateTime.now().toIso8601String(),
-          'photos': jsonEncode([]),
+          'photos': [],
         });
       });
 
@@ -222,23 +239,8 @@ class _EventsScreenState extends State<EventsScreen> {
         'code': eventDoc.data['code'],
         'password': eventDoc.data['password'],
         'created_at': eventDoc.data['created_at'],
-        'photoData': []
+        'photos': eventDoc.data['photos'] ?? [],
       };
-
-      // Decode the photoData JSON string
-      if (eventDoc.data['photoData'] != null) {
-        try {
-          debugPrint('Decoding photoData: ${eventDoc.data['photoData']}');
-          final photoDataJson = eventDoc.data['photoData'];
-          final List<dynamic> decodedPhotoData = jsonDecode(photoDataJson);
-          event['photoData'] = decodedPhotoData;
-          debugPrint(
-              'Successfully decoded photoData: ${decodedPhotoData.length} photos');
-        } catch (e) {
-          debugPrint('Error decoding photoData: $e');
-          // Keep empty array as fallback
-        }
-      }
 
       if (event['password'] != _eventPasswordController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -247,141 +249,110 @@ class _EventsScreenState extends State<EventsScreen> {
         return;
       }
 
-      // Save joined event to local storage
-      final prefs = await SharedPreferences.getInstance();
-      final joinedEvents = prefs.getStringList('joined_events') ?? [];
-      final eventDetails = {
-        'id': event['id'],
-        'name': event['name'],
-        'code': event['code'],
-        'password': event['password'],
-      };
-      joinedEvents.add(jsonEncode(eventDetails));
-      await prefs.setStringList('joined_events', joinedEvents);
-
-      // Load user's face features
-      final authService = AuthService();
-      final userFaceData = await authService.getFaceFeatures();
-
-      debugPrint(
-          'User face features loaded: ${userFaceData != null ? 'Yes' : 'No'}');
-
-      // Filter photos based on face matching
-      final matchingPhotos = <Map<String, dynamic>>[];
-      int totalPhotos = 0;
-      int matchedPhotos = 0;
-
-      if (userFaceData != null && (event['photoData'] as List).isNotEmpty) {
-        totalPhotos = event['photoData'].length;
-        debugPrint('Total photos in event: $totalPhotos');
-
-        for (final photoData in event['photoData']) {
-          bool hasMatch = false;
-
-          // Skip if no faces in this photo
-          if (photoData is! Map || photoData['faces'] == null) {
-            debugPrint('Skipping photo - no face data');
-            continue;
-          }
-
-          // For each photo, check if any face matches the user's face
-          for (var i = 0; i < photoData['faces'].length; i++) {
-            try {
-              // Get face feature and safely convert to Map<String, dynamic>
-              final dynamic rawFeature = photoData['faces'][i];
-              if (rawFeature is! Map) {
-                debugPrint('Face feature is not a map, skipping');
-                continue;
-              }
-
-              // Create a properly typed map
-              final Map<String, dynamic> faceFeature = {};
-              rawFeature.forEach((key, value) {
-                if (key is String) {
-                  faceFeature[key] = value;
-                }
-              });
-
-              // Calculate match score
-              final matchScore =
-                  _calculateFaceMatchScore(userFaceData, faceFeature);
-              debugPrint('Face match score: $matchScore');
-
-              if (matchScore > 0.7) {
-                // Arbitrary threshold for matching
-                hasMatch = true;
-                matchedPhotos++;
-                debugPrint('Match found! Score: $matchScore');
-                break;
-              }
-            } catch (e) {
-              debugPrint('Error processing face: $e');
-            }
-          }
-
-          if (hasMatch) {
-            // Convert to Map<String, dynamic> before adding
-            final Map<String, dynamic> typedPhotoData = {};
-            photoData.forEach((key, value) {
-              if (key is String) {
-                typedPhotoData[key] = value;
-              }
-            });
-            matchingPhotos.add(typedPhotoData);
-          }
-        }
-
-        // Update the event to only include matching photos
-        event['filteredPhotoData'] = matchingPhotos;
-        debugPrint(
-            'Filtered photos: ${matchingPhotos.length} out of $totalPhotos');
-      } else {
-        debugPrint('No user face features or no photos in event');
+      // Check if we have a face reference
+      if (_savedFaces.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Please add your face from the ADD EVENT tab first')),
+        );
+        return;
       }
 
-      // Show event photos (filtered if face recognition is enabled)
-      _showEventPhotos(event);
+      // Use the most recent saved face for matching
+      final latestFace = _savedFaces.last;
+      final facePath = latestFace['imagePath'];
+
+      if (facePath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Invalid face reference, please add your face again')),
+        );
+        return;
+      }
+
+      // Show loading indicator
+      setState(() {
+        _processingImage = true;
+      });
+
+      try {
+        // Create reference face image for matching
+        final faceBytes = await io.File(facePath).readAsBytes();
+        final referenceImage = MatchFacesImage(faceBytes, ImageType.PRINTED);
+
+        // Match face with event photos
+        final matchedPhotoIds = await _matchFaceWithEventPhotos(
+            referenceImage, event['photos'] as List);
+
+        // Store matched photos for this event
+        setState(() {
+          _matchedPhotos[event['id']] = matchedPhotoIds;
+        });
+
+        // Show event photos that match the user's face
+        _showEventPhotos(event, matchedPhotoIds);
+      } finally {
+        setState(() {
+          _processingImage = false;
+        });
+      }
 
       _eventCodeController.clear();
       _eventPasswordController.clear();
     } catch (e) {
+      setState(() {
+        _processingImage = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error joining event: $e')),
       );
     }
   }
 
-  // Helper method to calculate match score between two face features
-  double _calculateFaceMatchScore(
-      Map<String, dynamic> face1, Map<String, dynamic> face2) {
-    try {
-      // Access with null safety
-      double angleXDiff = ((face1['headEulerAngleX'] ?? 0.0) -
-              (face2['headEulerAngleX'] ?? 0.0))
-          .abs();
-      double angleYDiff = ((face1['headEulerAngleY'] ?? 0.0) -
-              (face2['headEulerAngleY'] ?? 0.0))
-          .abs();
-      double angleZDiff = ((face1['headEulerAngleZ'] ?? 0.0) -
-              (face2['headEulerAngleZ'] ?? 0.0))
-          .abs();
+  Future<List<String>> _matchFaceWithEventPhotos(
+      MatchFacesImage referenceImage, List eventPhotos) async {
+    final matchedPhotoIds = <String>[];
 
-      // Normalize differences
-      double totalDiff = (angleXDiff + angleYDiff + angleZDiff) / 180.0;
+    for (final fileId in eventPhotos) {
+      try {
+        final url = _appwriteService.getFileViewUrl(fileId);
 
-      // Convert to a similarity score
-      return 1.0 - totalDiff;
-    } catch (e) {
-      debugPrint('Error calculating face match: $e');
-      return 0.0; // No match on error
+        // Download the event photo
+        final response = await io.HttpClient().getUrl(Uri.parse(url));
+        final httpResponse = await response.close();
+        final bytes = await httpResponse.toList();
+        final imageBytes = bytes.expand((element) => element).toList();
+
+        // Create comparison image
+        final photoImage =
+            MatchFacesImage(Uint8List.fromList(imageBytes), ImageType.PRINTED);
+
+        // Match faces
+        final request = MatchFacesRequest([referenceImage, photoImage]);
+        final matchResponse = await faceSdk.matchFaces(request);
+
+        // Check if matched
+        final splitResponse =
+            await faceSdk.splitComparedFaces(matchResponse.results, 0.75);
+
+        if (splitResponse.matchedFaces.isNotEmpty) {
+          // There is a match - add the photo ID to matched list
+          matchedPhotoIds.add(fileId);
+        }
+      } catch (e) {
+        debugPrint('Error matching photo $fileId: $e');
+      }
     }
+
+    return matchedPhotoIds;
   }
 
-  void _showEventPhotos(Map<String, dynamic> event) {
-    // Determine which photos to display - filtered or all
-    final List<dynamic> photosList = event.containsKey('filteredPhotoData')
-        ? event['filteredPhotoData']
-        : event['photoData'] ?? [];
+  void _showEventPhotos(Map<String, dynamic> event,
+      [List<String>? filteredPhotoIds]) {
+    final photoIds =
+        filteredPhotoIds ?? (event['photos'] as List).cast<String>();
 
     showModalBottomSheet(
       context: context,
@@ -400,21 +371,10 @@ class _EventsScreenState extends State<EventsScreen> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              if (event.containsKey('filteredPhotoData'))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    'Showing ${photosList.length} photos matching your face',
-                    style: const TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ),
               const SizedBox(height: 16),
-              if (photosList.isEmpty)
+              if (photoIds.isEmpty)
                 const Center(
-                  child: Text('No photos available for this event'),
+                  child: Text('No matching photos found for you in this event'),
                 )
               else
                 Expanded(
@@ -425,26 +385,9 @@ class _EventsScreenState extends State<EventsScreen> {
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
-                    itemCount: photosList.length,
+                    itemCount: photoIds.length,
                     itemBuilder: (context, index) {
-                      final photoData = photosList[index];
-                      String imageUrl;
-
-                      // Handle different formats
-                      if (photoData is String) {
-                        // Direct fileId as string (old format)
-                        imageUrl = _appwriteService.getFileViewUrl(photoData);
-                      } else if (photoData is Map) {
-                        // New format with url field
-                        imageUrl = photoData['url'] ??
-                            _appwriteService
-                                .getFileViewUrl(photoData['fileId']);
-                      } else {
-                        // Fallback
-                        imageUrl =
-                            'https://via.placeholder.com/150?text=Invalid+Image';
-                      }
-
+                      final fileId = photoIds[index];
                       return GestureDetector(
                         onTap: () {
                           // Show full-screen image
@@ -457,66 +400,20 @@ class _EventsScreenState extends State<EventsScreen> {
                                 ),
                                 body: Center(
                                   child: Image.network(
-                                    imageUrl,
+                                    _appwriteService.getFileViewUrl(fileId),
                                     fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      debugPrint('Image error: $error');
-                                      return Container(
-                                        color: Colors.grey[300],
-                                        child: const Icon(Icons.broken_image,
-                                            color: Colors.white),
-                                      );
-                                    },
                                   ),
                                 ),
                               ),
                             ),
                           );
                         },
-                        child: Stack(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                imageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  debugPrint('Image error: $error');
-                                  return Container(
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.broken_image,
-                                        color: Colors.white),
-                                  );
-                                },
-                              ),
-                            ),
-                            // Show face count - make sure we handle different formats
-                            if (photoData is Map && photoData['faces'] != null)
-                              Positioned(
-                                top: 4,
-                                right: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.7),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.face,
-                                          color: Colors.white, size: 14),
-                                      const SizedBox(width: 2),
-                                      Text(
-                                        '${photoData['faces'].length}',
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            _appwriteService.getFileViewUrl(fileId),
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       );
                     },
@@ -534,268 +431,39 @@ class _EventsScreenState extends State<EventsScreen> {
     if (result.isEmpty) return;
 
     try {
-      final uploadedPhotoData = <String>[];
-      int processedImages = 0;
-      int totalImages = result.length;
-
-      // Show progress dialog
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              return AlertDialog(
-                title: const Text('Processing Images'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    LinearProgressIndicator(
-                        value: processedImages / totalImages),
-                    const SizedBox(height: 16),
-                    Text('$processedImages of $totalImages processed'),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      );
+      final uploadedFileIds = <String>[];
 
       for (final image in result) {
         final file = io.File(image.path);
-
-        // 1. Upload file to Appwrite
         final uploadedFile =
             await _appwriteService.uploadFile(file, event['id']);
-
-        // 2. Analyze image for faces
-        final inputImage = InputImage.fromFilePath(file.path);
-        final faces = await _faceDetector.processImage(inputImage);
-
-        // 3. Extract face features for each detected face
-        final faceFeatures = <Map<String, dynamic>>[];
-
-        for (final face in faces) {
-          final features = {
-            'boundingBox': {
-              'left': face.boundingBox.left,
-              'top': face.boundingBox.top,
-              'right': face.boundingBox.right,
-              'bottom': face.boundingBox.bottom,
-            },
-            'headEulerAngleX': face.headEulerAngleX,
-            'headEulerAngleY': face.headEulerAngleY,
-            'headEulerAngleZ': face.headEulerAngleZ,
-          };
-          faceFeatures.add(features);
-        }
-
-        // 4. Create photo data object
-        final photoData = {
-          'fileId': uploadedFile.$id,
-          'url': _appwriteService.getFileViewUrl(uploadedFile.$id),
-          'uploadedAt': DateTime.now().toIso8601String(),
-          'faces': faceFeatures,
-        };
-
-        final photoDataString = jsonEncode(photoData);
-
-        // Debug info about the size of the data
-        debugPrint('Photo data JSON length: ${photoDataString.length} chars');
-        if (photoDataString.length > 1000) {
-          debugPrint(
-              'WARNING: Photo data exceeds 1000 char limit: ${photoDataString.length}');
-          // Trim face features if needed
-          if (faceFeatures.length > 3) {
-            final trimmedFeatures = faceFeatures.sublist(0, 3);
-            final trimmedData = {
-              'fileId': uploadedFile.$id,
-              'url': _appwriteService.getFileViewUrl(uploadedFile.$id),
-              'uploadedAt': DateTime.now().toIso8601String(),
-              'faces': trimmedFeatures,
-              'note': 'Face data trimmed due to size limitations',
-            };
-            final trimmedString = jsonEncode(trimmedData);
-            debugPrint('Trimmed data length: ${trimmedString.length} chars');
-            uploadedPhotoData.add(trimmedString);
-          } else {
-            // Try without detailed face contours
-            final simplifiedFeatures = faceFeatures.map((face) {
-              return {
-                'boundingBox': face['boundingBox'],
-                'headEulerAngleX': face['headEulerAngleX'],
-                'headEulerAngleY': face['headEulerAngleY'],
-                'headEulerAngleZ': face['headEulerAngleZ'],
-              };
-            }).toList();
-
-            final simplifiedData = {
-              'fileId': uploadedFile.$id,
-              'url': _appwriteService.getFileViewUrl(uploadedFile.$id),
-              'uploadedAt': DateTime.now().toIso8601String(),
-              'faces': simplifiedFeatures,
-            };
-
-            final simplifiedString = jsonEncode(simplifiedData);
-            debugPrint(
-                'Simplified data length: ${simplifiedString.length} chars');
-            uploadedPhotoData.add(simplifiedString);
-          }
-        } else {
-          uploadedPhotoData.add(photoDataString);
-        }
-
-        // Update progress
-        processedImages++;
-        // We can't update the dialog state directly, so we'll just close and reopen it
+        uploadedFileIds.add(uploadedFile.$id);
       }
 
-      Navigator.pop(context); // Close progress dialog
-
-      // Update event document with new photo data
+      // Update event document with new file IDs
       final eventDoc = await _appwriteService.getEventByCode(event['code']);
       if (eventDoc != null) {
-        List<dynamic> existingPhotos = [];
+        final existingPhotos = eventDoc.data['photos'] ?? [];
+        final updatedPhotos = [...existingPhotos, ...uploadedFileIds];
 
-        // Decode existing photos if present
-        if (eventDoc.data['photoData'] != null) {
-          try {
-            existingPhotos = jsonDecode(eventDoc.data['photoData']);
-            debugPrint(
-                'Successfully decoded existing photos: ${existingPhotos.length}');
-          } catch (e) {
-            debugPrint('Error decoding existing photos: $e');
-            // Assume it's not JSON encoded yet
-            existingPhotos = [];
-          }
-        }
+        await _appwriteService.databases.updateDocument(
+          databaseId: _appwriteService.databaseId,
+          collectionId: _appwriteService.collectionId,
+          documentId: eventDoc.$id,
+          data: {'photos': updatedPhotos},
+        );
 
-        // Parse uploadedPhotoData from strings to actual objects
-        final List<dynamic> parsedUploadedData = uploadedPhotoData
-            .map((jsonStr) {
-              try {
-                return jsonDecode(jsonStr);
-              } catch (e) {
-                debugPrint('Error parsing photo data: $e');
-                return null;
-              }
-            })
-            .where((item) => item != null)
-            .toList();
-
-        // Combine both lists
-        final List<dynamic> allPhotos = [
-          ...existingPhotos,
-          ...parsedUploadedData
-        ];
-
-        // Convert the entire array to a single JSON string
-        final allPhotosJson = jsonEncode(allPhotos);
-        debugPrint('Combined photos JSON length: ${allPhotosJson.length}');
-
-        if (allPhotosJson.length > 1000) {
-          debugPrint('WARNING: Combined photos exceed 1000 char limit');
-
-          // Try just the new photos
-          final newPhotosJson = jsonEncode(parsedUploadedData);
-          if (newPhotosJson.length <= 1000) {
-            debugPrint(
-                'New photos only JSON length: ${newPhotosJson.length} - within limit');
-
-            try {
-              await _appwriteService.databases.updateDocument(
-                databaseId: _appwriteService.databaseId,
-                collectionId: _appwriteService.collectionId,
-                documentId: eventDoc.$id,
-                data: {'photoData': newPhotosJson},
-              );
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content: Text(
-                        'Added ${parsedUploadedData.length} new photos (replaced existing)')),
-              );
-              return;
-            } catch (e) {
-              debugPrint('Error updating with just new photos: $e');
-            }
-          } else {
-            debugPrint(
-                'Even new photos exceed limit (${newPhotosJson.length} chars)');
-
-            // Try adding just one photo (the first one)
-            if (parsedUploadedData.isNotEmpty) {
-              final singlePhotoJson = jsonEncode([parsedUploadedData.first]);
-              debugPrint('Single photo JSON length: ${singlePhotoJson.length}');
-
-              if (singlePhotoJson.length <= 1000) {
-                try {
-                  await _appwriteService.databases.updateDocument(
-                    databaseId: _appwriteService.databaseId,
-                    collectionId: _appwriteService.collectionId,
-                    documentId: eventDoc.$id,
-                    data: {'photoData': singlePhotoJson},
-                  );
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(
-                            'Added only the first photo (size limitations)')),
-                  );
-                  return;
-                } catch (e) {
-                  debugPrint('Error adding single photo: $e');
-                }
-              }
-            }
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text(
-                      'Cannot add photos: Exceeds Appwrite 1000 char limit')),
-            );
-            return;
-          }
-        } else {
-          try {
-            // All photos combined are within limits
-            await _appwriteService.databases.updateDocument(
-              databaseId: _appwriteService.databaseId,
-              collectionId: _appwriteService.collectionId,
-              documentId: eventDoc.$id,
-              data: {'photoData': allPhotosJson},
-            );
-
-            // Update local state
-            final eventIndex =
-                _events.indexWhere((e) => e['id'] == event['id']);
-            if (eventIndex >= 0) {
-              setState(() {
-                _events[eventIndex]['photoData'] = allPhotos;
-              });
-            }
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text(
-                      '${parsedUploadedData.length} photos uploaded successfully')),
-            );
-          } catch (e) {
-            debugPrint('Error updating document: $e');
-            throw e;
-          }
-        }
+        // Update local state
+        final eventIndex = _events.indexWhere((e) => e['id'] == event['id']);
+        setState(() {
+          _events[eventIndex]['photos'] = updatedPhotos;
+        });
       }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${uploadedFileIds.length} photos uploaded')),
+      );
     } catch (e) {
-      debugPrint('Error uploading photos: $e');
-      // Additional error detail
-      if (e.toString().contains('invalid_structure') ||
-          e.toString().contains('1000 chars')) {
-        debugPrint(
-            'Database field size exceeded - Appwrite has a 1000 character limit for string fields');
-      }
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error uploading photos: $e')),
       );
@@ -803,23 +471,26 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Future<void> _pickImage() async {
-    try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image == null) return;
+    if (!_faceApiInitialized) {
+      await _initializeFaceApi();
+      if (!_faceApiInitialized) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Face API not initialized')),
+        );
+        return;
+      }
+    }
 
+    try {
       setState(() {
-        _selectedImage = io.File(image.path);
-        _detectedFaces = null;
-        _faceFeatures = null;
         _processingImage = true;
       });
 
-      final inputImage = InputImage.fromFilePath(image.path);
-      final faces = await _faceDetector.processImage(inputImage);
-
-      if (faces.isEmpty) {
+      // Start face capture using FaceCaptureUI
+      final result = await faceSdk.startFaceCapture();
+      if (result.image == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No faces detected in the image')),
+          const SnackBar(content: Text('No face captured')),
         );
         setState(() {
           _processingImage = false;
@@ -827,63 +498,18 @@ class _EventsScreenState extends State<EventsScreen> {
         return;
       }
 
-      // Use the first detected face
-      final face = faces.first;
+      // Save captured image to file
+      final tempDir = await io.Directory.systemTemp.createTemp();
+      final tempFile = io.File('${tempDir.path}/face.jpg');
+      await tempFile.writeAsBytes(result.image!.image);
 
-      // Extract facial features (landmarks, contours, etc.)
-      final features = {
-        'boundingBox': {
-          'left': face.boundingBox.left,
-          'top': face.boundingBox.top,
-          'right': face.boundingBox.right,
-          'bottom': face.boundingBox.bottom,
-        },
-        'headEulerAngleX': face.headEulerAngleX,
-        'headEulerAngleY': face.headEulerAngleY,
-        'headEulerAngleZ': face.headEulerAngleZ,
-        'leftEyeOpenProbability': face.leftEyeOpenProbability,
-        'rightEyeOpenProbability': face.rightEyeOpenProbability,
-        'smilingProbability': face.smilingProbability,
-        'trackingId': face.trackingId,
-      };
-
-      if (face.landmarks.isNotEmpty) {
-        final landmarks = {};
-        for (final landmark in face.landmarks.entries) {
-          landmarks[landmark.key.toString()] = {
-            'x': landmark.value?.position.x,
-            'y': landmark.value?.position.y,
-          };
-        }
-        features['landmarks'] = landmarks;
-      }
-
-      if (face.contours.isNotEmpty) {
-        final contours = {};
-        for (final contour in face.contours.entries) {
-          // Create an empty list as the default value
-          List<Map<String, dynamic>> points = [];
-
-          // Only process contour points if contour.value is not null
-          if (contour.value != null) {
-            // Access the points property of FaceContour
-            for (final point in contour.value!.points) {
-              points.add({
-                'x': point.x,
-                'y': point.y,
-              });
-            }
-          }
-
-          // Store the points list (empty or with data)
-          contours[contour.key.toString()] = points;
-        }
-        features['contours'] = contours;
-      }
+      // Create a MatchFacesImage from the captured image
+      final capturedImage =
+          MatchFacesImage(result.image!.image, ImageType.PRINTED);
 
       setState(() {
-        _detectedFaces = faces;
-        _faceFeatures = features;
+        _selectedImage = tempFile;
+        _referenceImage = capturedImage;
         _processingImage = false;
       });
     } catch (e) {
@@ -911,13 +537,24 @@ class _EventsScreenState extends State<EventsScreen> {
             ],
           ),
         ),
-        body: TabBarView(
+        body: Stack(
           children: [
-            // Add Event Tab
-            _buildAddEventTab(),
+            TabBarView(
+              children: [
+                // Add Event Tab
+                _buildAddEventTab(),
 
-            // Join Event Tab
-            _buildJoinEventTab(),
+                // Join Event Tab
+                _buildJoinEventTab(),
+              ],
+            ),
+            if (_processingImage)
+              Container(
+                color: Colors.black.withOpacity(0.5),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
           ],
         ),
       ),
@@ -951,38 +588,9 @@ class _EventsScreenState extends State<EventsScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: _selectedImage != null
-                  ? Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.file(
-                          _selectedImage!,
-                          fit: BoxFit.cover,
-                        ),
-                        if (_detectedFaces != null)
-                          CustomPaint(
-                            painter: FacePainter(
-                              image: _selectedImage!,
-                              faces: _detectedFaces!,
-                              imageSize: Size(
-                                _selectedImage!
-                                    .readAsBytesSync()
-                                    .length
-                                    .toDouble(),
-                                _selectedImage!
-                                    .readAsBytesSync()
-                                    .length
-                                    .toDouble(),
-                              ),
-                            ),
-                          ),
-                        if (_processingImage)
-                          Container(
-                            color: Colors.black.withOpacity(0.5),
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                      ],
+                  ? Image.file(
+                      _selectedImage!,
+                      fit: BoxFit.cover,
                     )
                   : const Icon(
                       Icons.add_a_photo,
@@ -998,11 +606,11 @@ class _EventsScreenState extends State<EventsScreen> {
               ElevatedButton.icon(
                 onPressed: _pickImage,
                 icon: const Icon(Icons.add_photo_alternate),
-                label: const Text('Select Face Photo'),
+                label: const Text('Capture Face'),
               ),
             ],
           ),
-          if (_detectedFaces != null && _detectedFaces!.isNotEmpty)
+          if (_selectedImage != null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1090,7 +698,7 @@ class _EventsScreenState extends State<EventsScreen> {
                             IconButton(
                               icon: const Icon(Icons.info),
                               onPressed: () => _showEventPhotos(event),
-                              tooltip: 'View Photos',
+                              tooltip: 'View All Photos',
                             ),
                           ],
                         ),
@@ -1160,8 +768,11 @@ class _EventsScreenState extends State<EventsScreen> {
               itemBuilder: (context, index) {
                 final face = _savedFaces[index];
                 return ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.face),
+                  leading: CircleAvatar(
+                    backgroundImage: face['imagePath'] != null
+                        ? FileImage(io.File(face['imagePath']))
+                        : null,
+                    child: face['imagePath'] == null ? Icon(Icons.face) : null,
                   ),
                   title: Text(face['name']),
                   subtitle: Text(
@@ -1169,117 +780,8 @@ class _EventsScreenState extends State<EventsScreen> {
                 );
               },
             ),
-          _buildSavedEventsSection(),
         ],
       ),
     );
-  }
-
-  Widget _buildSavedEventsSection() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _loadJoinedEvents(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final savedEvents = snapshot.data ?? [];
-
-        if (savedEvents.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your Saved Events',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: savedEvents.length,
-              itemBuilder: (context, index) {
-                final event = savedEvents[index];
-                return Card(
-                  child: ListTile(
-                    title: Text(event['name']),
-                    subtitle: Text('Code: ${event['code']}'),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.login),
-                      onPressed: () {
-                        _eventCodeController.text = event['code'];
-                        _eventPasswordController.text = event['password'];
-                        _joinEvent();
-                      },
-                      tooltip: 'Quick Join',
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> _loadJoinedEvents() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final joinedEvents = prefs.getStringList('joined_events') ?? [];
-
-      return joinedEvents
-          .map((eventJson) => jsonDecode(eventJson) as Map<String, dynamic>)
-          .toList();
-    } catch (e) {
-      debugPrint('Error loading joined events: $e');
-      return [];
-    }
-  }
-}
-
-class FacePainter extends CustomPainter {
-  final io.File image;
-  final List<Face> faces;
-  final Size imageSize;
-
-  FacePainter({
-    required this.image,
-    required this.faces,
-    required this.imageSize,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Paint paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = Colors.red;
-
-    for (final face in faces) {
-      // Scale face position to the canvas size
-      final rect = Rect.fromLTRB(
-        face.boundingBox.left * size.width / imageSize.width,
-        face.boundingBox.top * size.height / imageSize.height,
-        face.boundingBox.right * size.width / imageSize.width,
-        face.boundingBox.bottom * size.height / imageSize.height,
-      );
-
-      canvas.drawRect(rect, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(FacePainter oldDelegate) {
-    return image != oldDelegate.image || faces != oldDelegate.faces;
   }
 }
