@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 class SearchBarWidget extends StatelessWidget {
   final VoidCallback onTap;
+  final VoidCallback onMenuTap;
 
   const SearchBarWidget({
     super.key,
     required this.onTap,
+    required this.onMenuTap,
   });
 
   @override
@@ -34,7 +36,7 @@ class SearchBarWidget extends StatelessWidget {
                 Icons.menu,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              onPressed: () {},
+              onPressed: onMenuTap,
             ),
             Expanded(
               child: TextField(
