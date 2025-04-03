@@ -10,7 +10,6 @@ import '../screens/browse_tab.dart';
 // import '../screens/cleanup_screen.dart';
 import '../screens/events_screen.dart';
 import '../screens/chat_screen.dart';
-import '../widgets/recent_section.dart';
 import '../widgets/search_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -203,59 +202,62 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
-        toolbarHeight: 80,
-        title: SearchBarWidget(
-          onTap: _showSearch,
-          onMenuTap: () {
-            final RenderBox button = context.findRenderObject() as RenderBox;
-            final RenderBox overlay = Navigator.of(context)
-                .overlay!
-                .context
-                .findRenderObject() as RenderBox;
-            final RelativeRect position = RelativeRect.fromRect(
-              Rect.fromPoints(
-                button.localToGlobal(Offset.zero, ancestor: overlay),
-                button.localToGlobal(button.size.bottomRight(Offset.zero),
-                    ancestor: overlay),
-              ),
-              Offset.zero & overlay.size,
-            );
+        toolbarHeight: _selectedIndex == 0 ? 80 : 0,
+        title: _selectedIndex == 0
+            ? SearchBarWidget(
+                onTap: _showSearch,
+                onMenuTap: () {
+                  final RenderBox button =
+                      context.findRenderObject() as RenderBox;
+                  final RenderBox overlay = Navigator.of(context)
+                      .overlay!
+                      .context
+                      .findRenderObject() as RenderBox;
+                  final RelativeRect position = RelativeRect.fromRect(
+                    Rect.fromPoints(
+                      button.localToGlobal(Offset.zero, ancestor: overlay),
+                      button.localToGlobal(button.size.bottomRight(Offset.zero),
+                          ancestor: overlay),
+                    ),
+                    Offset.zero & overlay.size,
+                  );
 
-            showMenu(
-              context: context,
-              position: position,
-              items: [
-                const PopupMenuItem(
-                  value: 'settings',
-                  child: Text('Settings'),
-                ),
-                PopupMenuItem(
-                  value: 'reindex',
-                  child: Row(
-                    children: const [
-                      Icon(Icons.refresh, size: 20),
-                      SizedBox(width: 8),
-                      Text('Reindex files'),
+                  showMenu(
+                    context: context,
+                    position: position,
+                    items: [
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: Text('Settings'),
+                      ),
+                      PopupMenuItem(
+                        value: 'reindex',
+                        child: Row(
+                          children: const [
+                            Icon(Icons.refresh, size: 20),
+                            SizedBox(width: 8),
+                            Text('Reindex files'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'help',
+                        child: Text('Help & feedback'),
+                      ),
                     ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'help',
-                  child: Text('Help & feedback'),
-                ),
-              ],
-              elevation: 8,
-            ).then((value) {
-              if (value == 'reindex') {
-                _startFileIndexing();
-              } else if (value == 'settings') {
-                // TODO: Show settings
-              } else if (value == 'help') {
-                // TODO: Show help
-              }
-            });
-          },
-        ),
+                    elevation: 8,
+                  ).then((value) {
+                    if (value == 'reindex') {
+                      _startFileIndexing();
+                    } else if (value == 'settings') {
+                      // TODO: Show settings
+                    } else if (value == 'help') {
+                      // TODO: Show help
+                    }
+                  });
+                },
+              )
+            : null,
         actions: [
           if (_isIndexing) _buildIndexingIndicator(),
         ],
@@ -264,14 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           // Main content
           _permissionGranted
-              ? Column(
-                  children: [
-                    const RecentSection(),
-                    Expanded(
-                      child: _getSelectedPage(),
-                    ),
-                  ],
-                )
+              ? _getSelectedPage()
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
