@@ -408,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     .onSurfaceVariant,
                           ),
                           onPressed: () => setState(() => _selectedIndex = 2),
-                          tooltip: 'Clean',
+                          tooltip: 'Events',
                         ),
                         IconButton(
                           icon: const Icon(Icons.settings),

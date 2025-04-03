@@ -1,4 +1,4 @@
-name: flutter_file_manger
+name: Un_title
 description: "A new Flutter project."
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -51,18 +51,23 @@ flutter:
     - assets/mobilebert_model.tflite
     - assets/icons/
 
-# Flutter Launcher Icons configuration
-flutter_launcher_icons:
+  
+flutter_icons:
   android: true
   ios: true
-  image_path: "assets/icons/playstore.png"
-  min_sdk_android: 21
-  adaptive_icon_background: "#00A4E4" # UCSS blue background color
-  adaptive_icon_foreground: "assets/icons/playstore.png"
-  remove_alpha_ios: true
-  web:
-    generate: false
-  windows:
-    generate: false
-  macos:
-    generate: false
+  image_path: "assets/icons/playstore.png"  # Path to your icon image
+# Flutter Launcher Icons configuration
+# flutter_launcher_icons:
+#   android: true
+#   ios: true
+#   image_path: "assets/icons/playstore.png"
+#   min_sdk_android: 21
+#   adaptive_icon_background: "#00A4E4" # UCSS blue background color
+#   adaptive_icon_foreground: "assets/icons/playstore.png"
+#   remove_alpha_ios: true
+#   web:
+#     generate: false
+#   windows:
+#     generate: false
+#   macos:
+#     generate: false

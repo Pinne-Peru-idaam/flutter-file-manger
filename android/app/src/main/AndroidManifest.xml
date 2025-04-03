@@ -21,7 +21,7 @@
 
     
     <application
-        android:label="flutter_file_manger"
+        android:label="Un-title"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
