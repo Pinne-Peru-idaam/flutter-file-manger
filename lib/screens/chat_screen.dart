@@ -1096,11 +1096,11 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages.add(response);
 
-        // If the response contains a PDF creation request
         if (response.action == "create_pdf") {
           _showPdfConfirmationDialog(response.text);
         }
 
+        // Speak the response if TTS is enabled
         if (_ttsEnabled && !response.isUser) {
           _speechController.speak(response.text);
         }
@@ -1132,16 +1132,9 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Search bar with gradient border
-            Container(
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
+            // Top bar with mode and TTS toggles
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
@@ -1149,34 +1142,19 @@ class _ChatScreenState extends State<ChatScreen> {
                     onPressed: _toggleMode,
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: _isListening ? 'Listening...' : 'Ask anything...',
-                        hintStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                      ),
-                      onSubmitted: _handleSubmitted,
+                  IconButton(
+                    icon: Icon(_ttsEnabled ? Icons.volume_up : Icons.volume_off),
+                    onPressed: _toggleTts,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  const Spacer(),
+                  Text(
+                    _inChatMode ? 'Chat Mode' : 'File Assistant',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-                    color: _isListening 
-                        ? Colors.red 
-                        : Theme.of(context).colorScheme.onSurface,
-                    onPressed: _toggleListening,
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    color: Theme.of(context).colorScheme.primary,
-                    onPressed: () => _handleSubmitted(_controller.text),
                   ),
                 ],
               ),
@@ -1224,6 +1202,59 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                 ),
               ),
+
+            // Bottom input field
+            Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                    color: _isListening 
+                        ? Colors.red 
+                        : Theme.of(context).colorScheme.onSurface,
+                    onPressed: _toggleListening,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _isListening ? 'Listening...' : 'Type a message...',
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      onSubmitted: _handleSubmitted,
+                      maxLines: 1,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    color: Theme.of(context).colorScheme.primary,
+                    onPressed: () => _handleSubmitted(_controller.text),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
