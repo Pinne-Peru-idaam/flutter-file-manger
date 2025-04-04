@@ -3,6 +3,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:path/path.dart' as path;
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
@@ -222,7 +223,40 @@ class AppwriteService {
     }
   }
 
-  // Upload file with progress tracking
+  // Add this method for image compression
+  Future<io.File> _compressImage(io.File file) async {
+    final String targetPath = file.path.replaceAll(
+      RegExp(r'\.(jpg|jpeg|png)$'),
+      '_compressed.webp',
+    );
+
+    try {
+      final result = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: 85, // Adjust quality as needed (0-100)
+        format: CompressFormat.webp,
+        minWidth: 1024, // Adjust minimum width as needed
+        minHeight: 1024, // Adjust minimum height as needed
+      );
+
+      if (result == null) {
+        debugPrint('Image compression failed, using original file');
+        return file;
+      }
+
+      debugPrint('Image compressed successfully: ${result.path}');
+      final compressedFile = io.File(result.path);
+      debugPrint(
+          'Original size: ${file.lengthSync()}, Compressed size: ${compressedFile.lengthSync()}');
+      return compressedFile;
+    } catch (e) {
+      debugPrint('Error compressing image: $e');
+      return file; // Return original file if compression fails
+    }
+  }
+
+  // Modify the uploadFileWithProgress method to include compression
   Future<models.File> uploadFileWithProgress(
       io.File file, String eventId, Function(double) onProgress) async {
     // Check authentication first
@@ -232,19 +266,20 @@ class AppwriteService {
     }
 
     try {
-      final fileName = path.basename(file.path);
+      // Compress the image if it's an image file
+      final fileExtension = path.extension(file.path).toLowerCase();
+      final isImage = ['.jpg', '.jpeg', '.png'].contains(fileExtension);
+
+      final fileToUpload = isImage ? await _compressImage(file) : file;
+      final fileName = path.basename(fileToUpload.path);
+
       debugPrint('Uploading file: $fileName for event: $eventId');
 
-      // Use a simple workaround since onProgress isn't supported directly
-      // First read the file to get its size
-      final fileSize = await file.length();
-
-      // Create the file without progress tracking
       final result = await storage.createFile(
         bucketId: bucketId,
         fileId: ID.unique(),
         file: InputFile.fromPath(
-          path: file.path,
+          path: fileToUpload.path,
           filename: '${eventId}_$fileName',
         ),
         onProgress: (uploaded) {
@@ -252,6 +287,15 @@ class AppwriteService {
           onProgress(uploaded.progress / 100);
         },
       );
+
+      // Clean up compressed file if it's different from original
+      if (isImage && fileToUpload.path != file.path) {
+        try {
+          await fileToUpload.delete();
+        } catch (e) {
+          debugPrint('Error deleting temporary compressed file: $e');
+        }
+      }
 
       debugPrint('File uploaded successfully: ${result.$id}');
       return result;
