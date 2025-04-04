@@ -496,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: isSelected 
                 ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.15)
@@ -508,8 +508,8 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Image.asset(
                 assetIcon,
-                width: 24,
-                height: 24,
+                width: 22,
+                height: 22,
                 color: isSelected
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -518,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11.5,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                   color: isSelected
                       ? Theme.of(context).colorScheme.primary
