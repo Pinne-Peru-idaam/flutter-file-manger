@@ -6,9 +6,17 @@ import 'dart:io';
 import '../widgets/category_card.dart';
 import '../screens/file_list_screen.dart';
 import '../widgets/recent_section.dart';
+import '../models/file_index.dart';
 
 class CategoriesTab extends StatelessWidget {
-  const CategoriesTab({super.key});
+  final FileIndex fileIndex;
+  final String apiKey;
+
+  const CategoriesTab({
+    required this.fileIndex,
+    required this.apiKey,
+    super.key,
+  });
 
   Future<String> _getBasePath() async {
     if (Platform.isAndroid) {
@@ -32,7 +40,10 @@ class CategoriesTab extends StatelessWidget {
 
         return Column(
           children: [
-            const RecentSection(),
+            RecentSection(
+              fileIndex: fileIndex,
+              apiKey: apiKey,
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(14),

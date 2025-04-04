@@ -524,13 +524,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _getSelectedPage() {
     switch (_selectedIndex) {
       case 0:
-        return const CategoriesTab();
+        return CategoriesTab(
+          fileIndex: _fileIndex,
+          apiKey: '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',
+        );
       case 1:
         return const BrowseTab();
       case 2:
         return const EventsScreen();
       default:
-        return const CategoriesTab();
+        return CategoriesTab(
+          fileIndex: _fileIndex,
+          apiKey: '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',
+        );
     }
   }
 

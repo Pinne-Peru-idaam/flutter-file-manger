@@ -994,10 +994,12 @@ class OfflineChatAssistant {
 class ChatScreen extends StatefulWidget {
   final FileIndex fileIndex;
   final String apiKey;
+  final bool initialChatMode;
 
   const ChatScreen({
     required this.fileIndex,
     required this.apiKey,
+    this.initialChatMode = false,
     super.key,
   });
 
@@ -1030,6 +1032,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     _chatAssistant = OfflineChatAssistant(groqChatService: _groqChatService);
     _initializeControllers();
+    _inChatMode = widget.initialChatMode;
     _addWelcomeMessage();
     _loadChatHistory();
     _initializeFileIndex();
