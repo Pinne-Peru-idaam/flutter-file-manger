@@ -1138,7 +1138,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.menu),
+                    icon: Icon(_inChatMode ? Icons.chat : Icons.folder),
                     onPressed: _toggleMode,
                     color: Theme.of(context).colorScheme.onSurface,
                   ),
