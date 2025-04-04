@@ -37,6 +37,7 @@ class _EventsScreenState extends State<EventsScreen> {
   TextEditingController _eventPasswordController = TextEditingController();
 
   final AppwriteService _appwriteService = AppwriteService();
+  final AuthService _authService = AuthService();
 
   List<Map<String, dynamic>> _joinedEvents = [];
   Map<String, double> _uploadProgress = {};
@@ -100,9 +101,27 @@ class _EventsScreenState extends State<EventsScreen> {
 
   Future<void> _loadEvents() async {
     try {
+      // First check if user is authenticated using AuthService
+      if (!await _authService.isLoggedIn()) {
+        setState(() {
+          _events = []; // Clear events if not authenticated
+        });
+        return;
+      }
+
+      // Get current user from AuthService
+      final currentUser = await _authService.getCurrentUser();
+      final currentUserId = currentUser.$id;
+
+      // Get all events
       final documents = await _appwriteService.getEvents();
+
+      // Filter events to only show those created by current user
       setState(() {
         _events = documents
+            .where((doc) =>
+                doc.data['userId'] ==
+                currentUserId) // Only include events where userId matches current user
             .map((doc) => {
                   'id': doc.$id,
                   'name': doc.data['name'],
@@ -110,11 +129,16 @@ class _EventsScreenState extends State<EventsScreen> {
                   'password': doc.data['password'],
                   'created_at': doc.data['created_at'],
                   'photos': doc.data['photos'] ?? [],
+                  'userId': doc.data['userId'], // Add userId to the event data
                 })
             .toList();
       });
     } catch (e) {
       debugPrint('Error loading events: $e');
+      // If there's an error, clear the events
+      setState(() {
+        _events = [];
+      });
     }
   }
 
@@ -186,14 +210,17 @@ class _EventsScreenState extends State<EventsScreen> {
     }
 
     try {
-      // Check authentication
-      if (!await _appwriteService.isAuthenticated()) {
+      // Check authentication using AuthService
+      if (!await _authService.isLoggedIn()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please sign in to create events')),
         );
         Navigator.pushNamed(context, '/signin');
         return;
       }
+
+      // Get current user from AuthService
+      final currentUser = await _authService.getCurrentUser();
 
       // Generate random event code
       final random = Random();
@@ -205,6 +232,8 @@ class _EventsScreenState extends State<EventsScreen> {
         'password': _eventPasswordController.text,
         'created_at': DateTime.now().toIso8601String(),
         'photos': [],
+        'userId': currentUser.$id, // Add the current user's ID
+        'creatorName': currentUser.name, // Optionally add the creator's name
       };
 
       final document = await _appwriteService.createEvent(eventData);
@@ -217,6 +246,7 @@ class _EventsScreenState extends State<EventsScreen> {
           'password': _eventPasswordController.text,
           'created_at': DateTime.now().toIso8601String(),
           'photos': [],
+          'userId': currentUser.$id,
         });
       });
 
@@ -883,87 +913,120 @@ class _EventsScreenState extends State<EventsScreen> {
           const SizedBox(height: 32),
           const Divider(),
           const SizedBox(height: 16),
-          const Text(
-            'Create New Event',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _eventNameController,
-            decoration: const InputDecoration(
-              labelText: 'Event Name',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _eventPasswordController,
-            decoration: const InputDecoration(
-              labelText: 'Event Password',
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _createEvent,
-            child: const Text('Create Event'),
-          ),
-          const SizedBox(height: 16),
+          FutureBuilder<bool>(
+            future: _authService.isLoggedIn(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          // Created Events List
-          if (_events.isNotEmpty)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const Text(
-                  'Your Created Events',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+              final isLoggedIn = snapshot.data ?? false;
+
+              if (!isLoggedIn) {
+                return Column(
+                  children: [
+                    const Text(
+                      'Please sign in to create and manage events',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.pushNamed(context, '/signin'),
+                      child: const Text('Sign In'),
+                    ),
+                  ],
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Create New Event',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _events.length,
-                  itemBuilder: (context, index) {
-                    final event = _events[index];
-                    return Card(
-                      child: ListTile(
-                        title: Text(event['name']),
-                        subtitle: Text('Code: ${event['code']}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.photo_library),
-                              onPressed: () => _uploadPhotosToEvent(event),
-                              tooltip: 'Upload Photos',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.info),
-                              onPressed: () => _showEventPhotos(event),
-                              tooltip: 'View All Photos',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete),
-                              onPressed: () => _deleteEvent(event),
-                              tooltip: 'Delete Event',
-                            ),
-                          ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _eventNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Event Name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _eventPasswordController,
+                    decoration: const InputDecoration(
+                      labelText: 'Event Password',
+                      border: OutlineInputBorder(),
+                    ),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _createEvent,
+                    child: const Text('Create Event'),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Created Events List
+                  if (_events.isNotEmpty)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Your Created Events',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+                        const SizedBox(height: 8),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _events.length,
+                          itemBuilder: (context, index) {
+                            final event = _events[index];
+                            return Card(
+                              child: ListTile(
+                                title: Text(event['name']),
+                                subtitle: Text('Code: ${event['code']}'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.photo_library),
+                                      onPressed: () =>
+                                          _uploadPhotosToEvent(event),
+                                      tooltip: 'Upload Photos',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.info),
+                                      onPressed: () => _showEventPhotos(event),
+                                      tooltip: 'View All Photos',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete),
+                                      onPressed: () => _deleteEvent(event),
+                                      tooltip: 'Delete Event',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
