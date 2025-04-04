@@ -364,7 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Material(
                         color: Theme.of(context).colorScheme.primary,
                         child: InkWell(
-                          onTap: _showSearch,
+                          onTap: () => _showSearch(isChat: true),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
@@ -541,12 +541,25 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showSearch() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SearchScreen(fileIndex: _fileIndex),
-      ),
-    );
+  void _showSearch({bool isChat = false}) {
+    if (isChat) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            fileIndex: _fileIndex,
+            apiKey: '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',
+            initialChatMode: false,
+          ),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SearchScreen(fileIndex: _fileIndex),
+        ),
+      );
+    }
   }
 }
