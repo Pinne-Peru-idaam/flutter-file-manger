@@ -50,6 +50,7 @@ flutter:
     - assets/vocab.txt
     - assets/mobilebert_model.tflite
     - assets/icons/
+    - assets/
 
   
 flutter_icons:

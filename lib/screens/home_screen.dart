@@ -302,126 +302,47 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: null,
       floatingActionButtonLocation: null,
       bottomNavigationBar: _permissionGranted
-          ? BottomAppBar(
-              shape: const CircularNotchedRectangle(),
-              notchMargin: 8.0,
-              color: Theme.of(context).colorScheme.surface,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  // Left side buttons
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.home_filled,
-                            color: _selectedIndex == 0
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                          ),
-                          onPressed: () => setState(() => _selectedIndex = 0),
-                          tooltip: 'Home',
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.folder,
-                            color: _selectedIndex == 1
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                          ),
-                          onPressed: () => setState(() => _selectedIndex = 1),
-                          tooltip: 'Browse',
-                        ),
-                      ],
-                    ),
+          ? Padding(
+              padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline.withOpacity(0.12),
+                    width: 1,
                   ),
-
-                  // Center button (Chat)
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .shadow
-                              .withOpacity(0.2),
-                          spreadRadius: 2,
-                          blurRadius: 5,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNavItem(
+                      assetIcon: 'assets/icons/home.png',
+                      isSelected: _selectedIndex == 0,
+                      onTap: () => setState(() => _selectedIndex = 0),
+                      label: 'Home',
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Material(
-                        color: Theme.of(context).colorScheme.primary,
-                        child: InkWell(
-                          onTap: () => _showSearch(isChat: true),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.chat,
-                                  color:
-                                      Theme.of(context).colorScheme.onPrimary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Chat',
-                                  style: TextStyle(
-                                    color:
-                                        Theme.of(context).colorScheme.onPrimary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                    _buildNavItem(
+                      assetIcon: 'assets/icons/atom-02.png',
+                      isSelected: _selectedIndex == 1,
+                      onTap: () => setState(() => _selectedIndex = 1),
+                      label: 'Browse',
                     ),
-                  ),
-
-                  // Right side buttons
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.local_activity,
-                            color: _selectedIndex == 2
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                          ),
-                          onPressed: () => setState(() => _selectedIndex = 2),
-                          tooltip: 'Events',
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.settings),
-                          onPressed: () {
-                            // Implement settings navigation
-                          },
-                          tooltip: 'Settings',
-                        ),
-                      ],
+                    _buildNavItem(
+                      assetIcon: 'assets/icons/events.png',
+                      isSelected: _selectedIndex == 2,
+                      onTap: () => setState(() => _selectedIndex = 2),
+                      label: 'Events',
                     ),
-                  ),
-                ],
+                    _buildNavItem(
+                      assetIcon: 'assets/icons/message-chat-circle.png',
+                      isSelected: false,
+                      onTap: () => _showSearch(isChat: true),
+                      label: 'Chat',
+                    ),
+                  ],
+                ),
               ),
             )
           : null,
@@ -561,5 +482,53 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
+  }
+
+  Widget _buildNavItem({
+    required String assetIcon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required String label,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected 
+                ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                assetIcon,
+                width: 24,
+                height: 24,
+                color: isSelected
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
