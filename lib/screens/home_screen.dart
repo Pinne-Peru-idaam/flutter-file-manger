@@ -10,6 +10,7 @@ import '../screens/browse_tab.dart';
 // import '../screens/cleanup_screen.dart';
 import '../screens/events_screen.dart';
 import '../screens/chat_screen.dart';
+import '../screens/search_screen.dart';
 import '../widgets/search_bar.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -544,10 +545,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          fileIndex: _fileIndex,
-          apiKey: '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',
-        ),
+        builder: (context) => SearchScreen(fileIndex: _fileIndex),
       ),
     );
   }
