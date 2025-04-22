@@ -473,8 +473,10 @@ class _EventsScreenState extends State<EventsScreen> {
                                         IconButton(
                                           icon: const Icon(Icons.download),
                                           onPressed: () {
-                                            Navigator.pop(context); // Close full-screen view
-                                            _downloadSelectedPhotos([fileId]); // Download the photo
+                                            Navigator.pop(
+                                                context); // Close full-screen view
+                                            _downloadSelectedPhotos(
+                                                [fileId]); // Download the photo
                                           },
                                         ),
                                       ],
