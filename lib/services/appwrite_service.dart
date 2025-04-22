@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:typed_data';
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/models.dart' as models;
 import 'package:path/path.dart' as path;
@@ -301,6 +302,21 @@ class AppwriteService {
       return result;
     } catch (e) {
       debugPrint('Error uploading file: $e');
+      rethrow;
+    }
+  }
+
+  // Add this new method
+  Future<Uint8List> downloadFile(String fileId) async {
+    try {
+      final bytes = await storage.getFileDownload(
+        bucketId: bucketId,
+        fileId: fileId,
+      );
+      debugPrint('File downloaded successfully: $fileId');
+      return bytes;
+    } catch (e) {
+      debugPrint('Error downloading file: $e');
       rethrow;
     }
   }

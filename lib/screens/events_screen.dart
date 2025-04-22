@@ -8,6 +8,9 @@ import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import '../services/appwrite_service.dart';
 import '../services/auth_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:open_file/open_file.dart';
 
 class EventsScreen extends StatefulWidget {
   const EventsScreen({super.key});
@@ -404,77 +407,207 @@ class _EventsScreenState extends State<EventsScreen> {
       [List<String>? filteredPhotoIds]) {
     final photoIds =
         filteredPhotoIds ?? (event['photos'] as List).cast<String>();
+    final selectedPhotos = <String>{}; // Set to track selected photos
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Event: ${event['name']}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (photoIds.isEmpty)
-                const Center(
-                  child: Text('No matching photos found for you in this event'),
-                )
-              else
-                Expanded(
-                  child: GridView.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: photoIds.length,
-                    itemBuilder: (context, index) {
-                      final fileId = photoIds[index];
-                      return GestureDetector(
-                        onTap: () {
-                          // Show full-screen image
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => Scaffold(
-                                appBar: AppBar(
-                                  title: Text('Photo ${index + 1}'),
-                                ),
-                                body: Center(
-                                  child: Image.network(
-                                    _appwriteService.getFileViewUrl(fileId),
-                                    fit: BoxFit.contain,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Event: ${event['name']}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (photoIds.isNotEmpty && selectedPhotos.isNotEmpty)
+                        ElevatedButton(
+                          onPressed: () =>
+                              _downloadSelectedPhotos(selectedPhotos.toList()),
+                          child:
+                              Text('Download ${selectedPhotos.length} Photos'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (photoIds.isEmpty)
+                    const Center(
+                      child: Text(
+                          'No matching photos found for you in this event'),
+                    )
+                  else
+                    Expanded(
+                      child: GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                        ),
+                        itemCount: photoIds.length,
+                        itemBuilder: (context, index) {
+                          final fileId = photoIds[index];
+                          final isSelected = selectedPhotos.contains(fileId);
+
+                          return GestureDetector(
+                            onTap: () {
+                              // Show full-screen image
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => Scaffold(
+                                    appBar: AppBar(
+                                      title: Text('Photo ${index + 1}'),
+                                      actions: [
+                                        IconButton(
+                                          icon: const Icon(Icons.download),
+                                          onPressed: () {
+                                            Navigator.pop(context); // Close full-screen view
+                                            _downloadSelectedPhotos([fileId]); // Download the photo
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    body: Center(
+                                      child: Image.network(
+                                        _appwriteService.getFileViewUrl(fileId),
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                              );
+                            },
+                            onLongPress: () {
+                              setState(() {
+                                if (isSelected) {
+                                  selectedPhotos.remove(fileId);
+                                } else {
+                                  selectedPhotos.add(fileId);
+                                }
+                              });
+                            },
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    _appwriteService.getFileViewUrl(fileId),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                if (isSelected)
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.3),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: Colors.blue,
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(
+                                        Icons.check_circle,
+                                        color: Colors.white,
+                                        size: 30,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           );
                         },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            _appwriteService.getFileViewUrl(fileId),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-            ],
-          ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
+  }
+
+  // Add this new method to handle downloads
+  Future<void> _downloadSelectedPhotos(List<String> photoIds) async {
+    try {
+      setState(() {
+        _processingImage = true;
+      });
+
+      for (final fileId in photoIds) {
+        final bytes = await _appwriteService.downloadFile(fileId);
+
+        // Get the application documents directory
+        final appDir = await getApplicationDocumentsDirectory();
+        final fileName = 'event_photo_$fileId.jpg';
+        final filePath = path.join(appDir.path, fileName);
+
+        // Save the file
+        final file = io.File(filePath);
+        await file.writeAsBytes(bytes);
+      }
+
+      // Close the bottom sheet first
+      Navigator.pop(context);
+
+      // Then show the success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Text('${photoIds.length} photos downloaded successfully'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      // Close the bottom sheet if there's an error
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Error downloading photos: $e')),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _processingImage = false;
+      });
+    }
   }
 
   Future<void> _uploadPhotosToEvent(Map<String, dynamic> event) async {

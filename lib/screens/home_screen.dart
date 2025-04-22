@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       // Start with the most common directories
-      await _fileIndex.indexDirectory('/storage/emulated/0/Download');
+      // await _fileIndex.indexDirectory('/storage/emulated/0/Download');
       await _fileIndex.indexDirectory('/storage/emulated/0/DCIM');
       await _fileIndex.indexDirectory('/storage/emulated/0/Pictures');
       await _fileIndex.indexDirectory('/storage/emulated/0/Documents');
