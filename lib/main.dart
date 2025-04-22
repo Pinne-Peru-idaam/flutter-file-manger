@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'screens/home_screen.dart';
 import 'screens/signin_screen.dart';
 import 'screens/signup_screen.dart';
@@ -6,8 +7,15 @@ import 'services/auth_service.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'config/theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Lock orientation to portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   runApp(MyApp());
 }
 

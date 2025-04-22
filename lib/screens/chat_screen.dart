@@ -994,10 +994,12 @@ class OfflineChatAssistant {
 class ChatScreen extends StatefulWidget {
   final FileIndex fileIndex;
   final String apiKey;
+  final bool initialChatMode;
 
   const ChatScreen({
     required this.fileIndex,
     required this.apiKey,
+    this.initialChatMode = false,
     super.key,
   });
 
@@ -1030,6 +1032,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     _chatAssistant = OfflineChatAssistant(groqChatService: _groqChatService);
     _initializeControllers();
+    _inChatMode = widget.initialChatMode;
     _addWelcomeMessage();
     _loadChatHistory();
     _initializeFileIndex();
@@ -1042,21 +1045,32 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _addWelcomeMessage() {
     _messages.add(ChatMessage(
-      text:
-          "Hi! I'm your file assistant. Here are some things you can ask me to do:\n\n"
-          "📁 File Assistant Mode:\n"
-          "• \"Find my PDF files\"\n"
-          "• \"Convert document.pdf to image\"\n"
-          "• \"Show me my photos\"\n"
-          "• \"What's in my Downloads folder?\"\n\n"
-          "💬 Chat Mode Examples:\n"
-          "• \"Create a PDF about Flutter development best practices\"\n"
-          "• \"Generate a PDF study guide for Python programming\"\n"
-          "• \"Make a PDF about data structures with examples\"\n"
-          "• \"Create a technical documentation PDF for my project\"\n\n"
-          "You can switch between modes using the button in the top right corner. "
-          "In chat mode, I can help create detailed PDFs with custom content!\n\n"
-          "How can I help you today?",
+      text: _inChatMode
+          ? "👋 Welcome to Chat Mode!\n\n"
+            "I'm your AI assistant ready to help create custom content and PDFs. Here are some examples:\n\n"
+            "📚 What I can do:\n"
+            "• Create detailed PDF guides and documentation\n"
+            "• Generate study materials and tutorials\n"
+            "• Help with technical writing and content creation\n"
+            "• Answer questions and have engaging discussions\n\n"
+            "💡 Try asking:\n"
+            "\"Create a PDF about modern web development best practices\"\n"
+            "\"Generate a comprehensive study guide for machine learning\"\n"
+            "\"Help me write technical documentation for my API\"\n\n"
+            "What would you like to create today?"
+          : "👋 Welcome to File Assistant Mode!\n\n"
+            "I'm here to help you manage and work with your files. Here's what I can do:\n\n"
+            "📁 File Management:\n"
+            "• Find files by name, type, or content\n"
+            "• Convert PDFs to images\n"
+            "• Open and preview files\n"
+            "• Organize your documents\n\n"
+            "💡 Try asking:\n"
+            "\"Find my recent PDF files\"\n"
+            "\"Convert presentation.pdf to images\"\n"
+            "\"Show me photos from last week\"\n"
+            "\"What's in my Downloads folder?\"\n\n"
+            "How can I help with your files today?",
       isUser: false,
       files: [],
     ));
@@ -1082,11 +1096,11 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _messages.add(response);
 
-        // If the response contains a PDF creation request
         if (response.action == "create_pdf") {
           _showPdfConfirmationDialog(response.text);
         }
 
+        // Speak the response if TTS is enabled
         if (_ttsEnabled && !response.isUser) {
           _speechController.speak(response.text);
         }
@@ -1114,330 +1128,303 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _buildAppBar(),
-      body: Column(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar with mode and TTS toggles
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(_inChatMode ? Icons.chat : Icons.folder),
+                    onPressed: _toggleMode,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  IconButton(
+                    icon: Icon(_ttsEnabled ? Icons.volume_up : Icons.volume_off),
+                    onPressed: _toggleTts,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  const Spacer(),
+                  Text(
+                    _inChatMode ? 'Chat Mode' : 'File Assistant',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Messages list with modern styling
+            Expanded(
+              child: _messages.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      controller: _scrollController.controller,
+                      padding: const EdgeInsets.all(16.0),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        final message = _messages[index];
+                        return _buildMessageWidget(message);
+                      },
+                    ),
+            ),
+
+            // Loading indicator
+            if (_isProcessing)
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Thinking...',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Bottom input field
+            Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.shadow.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
+                    color: _isListening 
+                        ? Colors.red 
+                        : Theme.of(context).colorScheme.onSurface,
+                    onPressed: _toggleListening,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: _isListening ? 'Listening...' : 'Type a message...',
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      onSubmitted: _handleSubmitted,
+                      maxLines: 1,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    color: Theme.of(context).colorScheme.primary,
+                    onPressed: () => _handleSubmitted(_controller.text),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: _buildMessageList(),
+          Icon(
+            Icons.search,
+            size: 48,
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
           ),
-          if (_isProcessing) _buildProcessingIndicator(),
-          Divider(height: 1.0),
-          _buildInputArea(),
+          const SizedBox(height: 16),
+          Text(
+            'Ask anything about your files',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Search, convert, or chat about your documents',
+            style: TextStyle(
+              fontSize: 14,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      title: Text(_inChatMode ? 'Chat with Assistant' : 'File Assistant'),
-      actions: [
-        IconButton(
-          icon: Icon(_ttsEnabled ? Icons.volume_up : Icons.volume_off),
-          onPressed: _toggleTts,
-        ),
-        IconButton(
-          icon: Icon(_inChatMode ? Icons.folder : Icons.chat),
-          onPressed: _toggleMode,
-        ),
-        IconButton(
-          icon: const Icon(Icons.delete),
-          onPressed: _clearChat,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMessageList() {
-    return ListView.builder(
-      controller: _scrollController.controller,
-      padding: const EdgeInsets.all(8.0),
-      itemCount: _messages.length,
-      itemBuilder: (context, index) {
-        final message = _messages[index];
-        return _buildMessageWidget(message);
-      },
-    );
-  }
-
   Widget _buildMessageWidget(ChatMessage message) {
-    // Check if this is a summary message (contains markdown formatting)
-    bool isSummary = !message.isUser &&
-        (message.text.contains('# ') ||
-            message.text.contains('## ') ||
-            message.text.contains('- ') ||
-            message.text.contains('*') ||
-            message.text.contains('```'));
-
-    Widget textWidget;
-
-    if (isSummary) {
-      // Create a markdown widget for summary content
-      textWidget = Card(
-        color: Theme.of(context).colorScheme.secondary,
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              MarkdownBody(
-                data: message.text,
-                styleSheet: MarkdownStyleSheet(
-                  p: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  h1: GoogleFonts.poppins(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  h2: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  listBullet: GoogleFonts.poppins(
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSecondary,
-                  ),
-                  code: GoogleFonts.robotoMono(
-                    fontSize: 14,
-                    backgroundColor: Theme.of(context).colorScheme.surface,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                DateFormat('hh:mm a').format(DateTime.now()),
-                style: GoogleFonts.poppins(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSecondary
-                      .withOpacity(0.7),
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      // Use regular chat bubble for non-summary content
-      textWidget = BubbleSpecialThree(
-        text: message.text,
-        color: message.isUser
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.secondary,
-        tail: true,
-        isSender: message.isUser,
-        textStyle: TextStyle(
-          color: message.isUser
-              ? Colors.white
-              : Theme.of(context).colorScheme.onSecondary,
-        ),
-      );
-    }
-
-    // If there are files attached, show them
-    if (message.files.isNotEmpty) {
-      return Column(
-        crossAxisAlignment:
-            message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          textWidget,
-          const SizedBox(height: 8),
-          ...message.files.map((file) => _buildFileCard(file, message.action)),
-          const SizedBox(height: 16),
-        ],
-      );
-    }
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: textWidget,
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          // User/Assistant label
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  message.isUser ? Icons.person : Icons.assistant,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  message.isUser ? 'You' : 'Assistant',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Message content
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.85,
+            ),
+            decoration: BoxDecoration(
+              color: message.isUser
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                  : Theme.of(context).colorScheme.surfaceVariant,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  message.text,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Sources section for assistant messages
+          if (!message.isUser && message.files.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Sources',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: message.files.map((file) => _buildSourceChip(file)).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildFileCard(FileInfo file, String? action) {
-    IconData icon = Icons.insert_drive_file;
-    Color iconColor = Colors.blue;
-
+  Widget _buildSourceChip(FileInfo file) {
+    IconData icon;
     switch (file.type) {
       case 'image':
         icon = Icons.image;
-        iconColor = Colors.purple;
-        break;
-      case 'video':
-        icon = Icons.video_library;
-        iconColor = Colors.red;
-        break;
-      case 'audio':
-        icon = Icons.music_note;
-        iconColor = Colors.orange;
         break;
       case 'pdf':
         icon = Icons.picture_as_pdf;
-        iconColor = Colors.red;
         break;
       case 'document':
         icon = Icons.description;
-        iconColor = Colors.blue;
         break;
-      case 'spreadsheet':
-        icon = Icons.table_chart;
-        iconColor = Colors.green;
-        break;
+      default:
+        icon = Icons.insert_drive_file;
     }
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: InkWell(
-        onTap: () async {
-          // In file assistant mode and it's a document or PDF, generate a summary
-          if (!_inChatMode && (file.type == 'document' || file.type == 'pdf')) {
-            setState(() {
-              _isProcessing = true;
-            });
-
-            try {
-              final summaryMessage = await _assistant.summarizeDocument(file);
-              setState(() {
-                _messages.add(summaryMessage);
-              });
-            } catch (e) {
-              debugPrint('Error summarizing document: $e');
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error summarizing document: $e')),
-              );
-            } finally {
-              setState(() {
-                _isProcessing = false;
-              });
-              _scrollController.scrollToBottom();
-            }
-          } else {
-            // Otherwise, handle according to action or just open the file
-            if (action != null) {
-              _handleFileAction(action, file);
-            } else {
-              _openFile(file.path);
-            }
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              Icon(icon, color: iconColor, size: 40),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      file.path,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuButton(
-                icon: const Icon(Icons.more_vert),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'open',
-                    child: Row(
-                      children: const [
-                        Icon(Icons.open_in_new, size: 18),
-                        SizedBox(width: 8),
-                        Text('Open file'),
-                      ],
-                    ),
-                  ),
-                  if ((file.type == 'document' || file.type == 'pdf') &&
-                      !_inChatMode)
-                    PopupMenuItem(
-                      value: 'summarize',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.summarize, size: 18),
-                          SizedBox(width: 8),
-                          Text('Summarize content'),
-                        ],
-                      ),
-                    ),
-                  PopupMenuItem(
-                    value: 'use_in_chat',
-                    child: Row(
-                      children: const [
-                        Icon(Icons.chat, size: 18),
-                        SizedBox(width: 8),
-                        Text('Use in chat'),
-                      ],
-                    ),
-                  ),
-                  if (file.type == 'pdf')
-                    PopupMenuItem(
-                      value: 'convert',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.transform, size: 18),
-                          SizedBox(width: 8),
-                          Text('Convert to image'),
-                        ],
-                      ),
-                    ),
-                ],
-                onSelected: (value) async {
-                  if (value == 'open') {
-                    await _openFile(file.path);
-                  } else if (value == 'summarize') {
-                    setState(() {
-                      _isProcessing = true;
-                    });
-
-                    try {
-                      final summaryMessage =
-                          await _assistant.summarizeDocument(file);
-                      setState(() {
-                        _messages.add(summaryMessage);
-                      });
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Error summarizing document: $e')),
-                      );
-                    } finally {
-                      setState(() {
-                        _isProcessing = false;
-                      });
-                      _scrollController.scrollToBottom();
-                    }
-                  } else if (value == 'use_in_chat') {
-                    setState(() {
-                      _controller.text = _suggestCommandForFile(file);
-                    });
-                  } else if (value == 'convert' && file.type == 'pdf') {
-                    await _handleConversion(file);
-                  }
-                },
-              ),
-            ],
+    return InkWell(
+      onTap: () => _openFile(file.path),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
           ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              file.name,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1520,54 +1507,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Widget _buildProcessingIndicator() {
-    return const Padding(
-      padding: EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: 8),
-          Text('Processing...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputArea() {
-    return Container(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          IconButton(
-            icon: Icon(_isListening ? Icons.mic_off : Icons.mic),
-            color: _isListening ? Colors.red : null,
-            onPressed: _toggleListening,
-          ),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              decoration: InputDecoration(
-                hintText: _isListening ? 'Listening...' : 'Type a message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              onSubmitted: _handleSubmitted,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.send),
-            onPressed: () => _handleSubmitted(_controller.text),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _toggleTts() {
     setState(() {
       _ttsEnabled = !_ttsEnabled;
@@ -1582,17 +1521,20 @@ class _ChatScreenState extends State<ChatScreen> {
       _inChatMode = !_inChatMode;
       _messages.add(ChatMessage(
         text: _inChatMode
-            ? "Switched to chat mode. You can now:\n\n"
-                "• Create custom PDFs (e.g., \"Create a PDF about machine learning basics\")\n"
-                "• Generate study materials (e.g., \"Make a PDF study guide for algorithms\")\n"
-                "• Create documentation (e.g., \"Generate a PDF about my project architecture\")\n\n"
-                "Just tell me what kind of PDF you need, and I'll help you create it!"
-            : "Switched to file assistant mode. You can now:\n\n"
-                "• Search for files\n"
-                "• Convert PDFs to images\n"
-                "• Open and manage files\n"
-                "• Organize your documents\n\n"
-                "What files can I help you with?",
+            ? "🤖 Switched to Chat Mode\n\n"
+              "Now you can:\n"
+              "• Create professional PDFs with custom content\n"
+              "• Generate comprehensive study materials\n"
+              "• Get help with technical writing\n"
+              "• Have in-depth discussions on any topic\n\n"
+              "What would you like to create or discuss?"
+            : "📁 Switched to File Assistant Mode\n\n"
+              "Now you can:\n"
+              "• Search through your files and documents\n"
+              "• Convert and transform file formats\n"
+              "• Get quick access to your files\n"
+              "• Organize your digital workspace\n\n"
+              "What files can I help you with?",
         isUser: false,
         files: [],
       ));

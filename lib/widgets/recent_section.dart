@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+import '../screens/chat_screen.dart';
+import '../models/file_index.dart';
 
 class RecentSection extends StatelessWidget {
-  const RecentSection({super.key});
+  final FileIndex fileIndex;
+  final String apiKey;
+
+  const RecentSection({
+    required this.fileIndex,
+    required this.apiKey,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -21,8 +30,16 @@ class RecentSection extends StatelessWidget {
           const SizedBox(height: 16),
           InkWell(
             onTap: () {
-              // Add your AI search action here
-              debugPrint('AI Search tapped');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    fileIndex: fileIndex,
+                    apiKey: apiKey,
+                    initialChatMode: true,
+                  ),
+                ),
+              );
             },
             child: Container(
               padding: const EdgeInsets.fromLTRB(40, 60, 40, 60),
@@ -46,10 +63,7 @@ class RecentSection extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withOpacity(0.1),
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -75,8 +89,7 @@ class RecentSection extends StatelessWidget {
                         Text(
                           'Improve productivity with AI assistance',
                           style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                             fontSize: 14,
                           ),
                         ),
